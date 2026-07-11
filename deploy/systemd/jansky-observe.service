@@ -1,0 +1,32 @@
+# jansky-observe API server — REST + WebSocket fan-out + browser UI (plan §2).
+# Installed by deploy/install.sh, which embeds an identical copy; CI diffs the two
+# (install.sh --print-unit server) so this file and the installer can never drift.
+[Unit]
+Description=jansky-observe API server (REST + WebSocket + UI)
+Documentation=https://github.com/joebarbere/jansky-observe
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=exec
+User=jansky
+Group=jansky
+# plugdev matches the udev rules (deploy/udev/). The server itself never touches the
+# SDRs, but parity with the capture daemon keeps permissions unsurprising.
+SupplementaryGroups=plugdev
+Environment=JANSKY_OBSERVE_ZMQ_ENDPOINT=tcp://127.0.0.1:8410
+WorkingDirectory=/var/lib/jansky-observe
+ExecStart=/opt/jansky-observe/venv/bin/jansky-observe --host 0.0.0.0 --port 8000
+Restart=on-failure
+RestartSec=2
+
+# Hardening — deliberately stops short of PrivateDevices/DeviceAllow, which would
+# break USB SDR access when M1 swaps in the real Airspy.
+NoNewPrivileges=true
+ProtectSystem=full
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/jansky-observe
+
+[Install]
+WantedBy=multi-user.target

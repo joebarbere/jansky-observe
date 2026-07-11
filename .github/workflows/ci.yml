@@ -1,0 +1,79 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        # ubuntu-24.04-arm is a native arm64 runner (free for public repos) — the same
+        # architecture as the Pi 5 the release wheel installs on (plan §9).
+        runner: [ubuntu-latest, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.runner }}
+    steps:
+      # The jansky dependency is a local path source (../jansky, not on PyPI); check the
+      # two repos out side by side so `uv sync` resolves it on a clean runner — the same
+      # convention as jansky-research.
+      - name: Checkout jansky-observe
+        uses: actions/checkout@v4
+        with:
+          path: jansky-observe
+      - name: Checkout jansky (the library dependency)
+        uses: actions/checkout@v4
+        with:
+          repository: joebarbere/jansky
+          ref: v0.1.0
+          path: jansky
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          python-version: "3.12"
+      - name: Sync
+        working-directory: jansky-observe
+        run: uv sync
+      - name: Lint
+        working-directory: jansky-observe
+        run: uv run ruff check src/ tests/
+      - name: Format check
+        working-directory: jansky-observe
+        run: uv run ruff format --check src/ tests/
+      - name: Typecheck
+        working-directory: jansky-observe
+        run: uv run mypy
+      - name: Test + coverage floor
+        working-directory: jansky-observe
+        run: uv run pytest --cov=jansky_observe --cov-report=term-missing
+      - name: Build sdist + wheel
+        working-directory: jansky-observe
+        run: uv build
+      # install.sh must be standalone (curl | sudo bash), so it EMBEDS the systemd units
+      # and udev rules; the copies under deploy/systemd/ and deploy/udev/ must be the
+      # same bytes. This diff is the contract that they never drift apart.
+      - name: Deploy drift check (embedded units/udev == deploy/ copies)
+        working-directory: jansky-observe
+        run: |
+          bash deploy/install.sh --print-unit server | diff -u deploy/systemd/jansky-observe.service -
+          bash deploy/install.sh --print-unit capture | diff -u deploy/systemd/jansky-observe-capture.service -
+          bash deploy/install.sh --print-udev | diff -u deploy/udev/99-jansky-observe-sdr.rules -
+      - name: Shell syntax check
+        working-directory: jansky-observe
+        run: bash -n deploy/install.sh deploy/qemu/run-install-test.sh
+      # Only the arm64 wheel matters downstream (it is what the Pi installs); the wheel
+      # is pure-Python but building/uploading from the arm64 leg keeps the provenance honest.
+      - name: Upload dist artifact (arm64 leg only)
+        if: matrix.runner == 'ubuntu-24.04-arm'
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: jansky-observe/dist/*
+          if-no-files-found: error

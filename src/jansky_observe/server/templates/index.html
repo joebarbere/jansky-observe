@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>jansky-observe — live</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body data-ws-path="{{ ws_path }}">
+  <header id="statusbar">
+    <span id="conn" class="badge connecting">connecting&hellip;</span>
+    <span class="stat">seq <b id="stat-seq">&ndash;</b></span>
+    <span class="stat"><b id="stat-fps">&ndash;</b> fps</span>
+    <span class="stat">center <b id="stat-center">&ndash;</b> MHz</span>
+    <span class="stat">span <b id="stat-span">&ndash;</b> MHz</span>
+    <span id="version">jansky-observe {{ version }}</span>
+  </header>
+  <main>
+    <section id="spectrum-wrap" class="pane">
+      <canvas id="spectrum"></canvas>
+    </section>
+    <section id="waterfall-wrap" class="pane">
+      <canvas id="waterfall"></canvas>
+    </section>
+    <div id="overlay">waiting for capture daemon&hellip;</div>
+  </main>
+  <script src="/static/waterfall.js"></script>
+</body>
+</html>

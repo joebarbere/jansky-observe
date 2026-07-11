@@ -1,0 +1,16 @@
+# deploy/OS_IMAGE — the pinned Raspberry Pi OS base image (plan §9).
+#
+# Pin policy: this is the ONE manual prerequisite of the whole install story. install.sh
+# supports exactly this base (Raspberry Pi OS Lite 64-bit, Debian 13 "Trixie", aarch64);
+# flash it with Raspberry Pi Imager (SSH enabled) and everything else is install.sh's job.
+# Changing this pin REQUIRES re-running the full-fidelity install gate against the new
+# image (`make qemu-install`) before the next tag — same rule as changing install.sh
+# itself (release-blocking, plan §9/§10).
+#
+# Verified 2026-07-11 against the official index:
+#   https://downloads.raspberrypi.com/raspios_lite_arm64/images/
+# OS_IMAGE_SHA256 is the SHA-256 of the .img.xz, taken from the published .sha256 file.
+OS_IMAGE_NAME=2026-06-18-raspios-trixie-arm64-lite.img.xz
+OS_IMAGE_DATE=2026-06-18
+OS_IMAGE_URL=https://downloads.raspberrypi.com/raspios_lite_arm64/images/raspios_lite_arm64-2026-06-19/2026-06-18-raspios-trixie-arm64-lite.img.xz
+OS_IMAGE_SHA256=acff736ca7945e3b305f07cda4abdb870910e12634991da69783611756e381b3

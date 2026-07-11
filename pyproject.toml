@@ -1,0 +1,86 @@
+[project]
+name = "jansky-observe"
+version = "0.1.0"
+description = "Observation management for the Discovery Dish station: plan, run, and record attended radio observations. Sibling of the jansky course and jansky-research."
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+license = { file = "LICENSE" }
+authors = [{ name = "Joe Barbere" }]
+keywords = ["radio-astronomy", "hydrogen-line", "sdr", "airspy", "observation", "spectrometer"]
+
+dependencies = [
+    "jansky",
+    "fastapi>=0.115",
+    "uvicorn>=0.30",
+    "websockets>=12",
+    "jinja2>=3.1",
+    "numpy>=1.26",
+    "scipy>=1.11",
+    "pyzmq>=26",
+]
+
+[project.urls]
+Homepage = "https://github.com/joebarbere/jansky-observe"
+
+[project.scripts]
+jansky-observe = "jansky_observe.server.cli:main"
+jansky-observe-capture = "jansky_observe.capture.daemon:main"
+
+# jansky is not on PyPI. Local development resolves the sibling checkout below;
+# release wheels are installed by deploy/install.sh, which installs jansky from
+# its git tag first (jansky @ git+https://github.com/joebarbere/jansky@v0.1.0),
+# and CI checks the two repos out side by side (see .github/workflows/).
+[tool.uv.sources]
+jansky = { path = "../jansky", editable = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/jansky_observe"]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.6",
+    "pytest>=8.2",
+    "pytest-cov>=5.0",
+    "mypy>=1.11",
+    "httpx>=0.27",
+]
+
+[tool.uv]
+default-groups = ["dev"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+extend-exclude = ["data"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "W"]
+ignore = ["E501"]  # line length handled by the formatter; prose-heavy docstrings
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+filterwarnings = ["ignore::DeprecationWarning"]
+
+[tool.coverage.run]
+source = ["jansky_observe"]
+
+[tool.coverage.report]
+# House floor, same as jansky and jansky-research.
+fail_under = 85
+exclude_also = [
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+]
+
+[tool.mypy]
+files = ["src/jansky_observe"]
+python_version = "3.12"
+ignore_missing_imports = true
+warn_unused_ignores = true
+warn_redundant_casts = true

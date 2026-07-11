@@ -1,0 +1,28 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+title: "jansky-observe: Observation management for an attended hydrogen-line radio telescope"
+abstract: >-
+  Station software for a hydrogen-line radio telescope (Discovery Dish 700 mm +
+  H-line feed, Airspy Mini, Raspberry Pi 5): plan, run, and record attended
+  radio observations end to end — live waterfall/spectrum in the browser,
+  captures to SigMF/npz on disk, checklists, weather snapshots, classifier
+  confirmation, and PDF reports. Built on the jansky course library; sibling of
+  jansky-research.
+type: software
+authors:
+  - given-names: Joseph
+    family-names: Barbere
+    orcid: "https://orcid.org/0009-0008-3289-4447"
+    affiliation: "Independent researcher"
+version: "0.1.0"
+date-released: "2026-07-11"
+license: MIT
+repository-code: "https://github.com/joebarbere/jansky-observe"
+url: "https://github.com/joebarbere/jansky-observe"
+keywords:
+  - radio astronomy
+  - HI 21 cm
+  - hydrogen line
+  - software-defined radio
+  - observation management
+  - open-source software

@@ -1,0 +1,17 @@
+# Environments and caches
+.venv/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+
+# Build artifacts
+dist/
+*.egg-info/
+
+# Runtime data: sqlite db, observations/<id>/{iq,spectra,photos,report.pdf}
+data/
+
+# QEMU install-test cache (downloaded OS images, extracted kernels)
+deploy/qemu/cache/
