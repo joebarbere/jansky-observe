@@ -45,6 +45,13 @@ after.
 | `v0.5.0` | M4 | Reports & photos: PDF export, Virgo/ezRA exporters | ✅ done |
 | `v0.6.0` | M5 | Feature-complete — the `v1.0.0` release candidate | ✅ done |
 | `v1.0.0` | — | After one real end-to-end observing campaign | ⏭ next |
+| `v0.7.0` | M6 | Station cockpit: status bar, diagnostics MCP, audio, dark mode, archive | 📋 planned |
+| `v0.8.0` | M7 | Calibration captures, scheduler, drift-scan campaigns, sky chart | 📋 planned |
+| `v0.9.0` | M8 | Research bridge: station UUID, export bundle, build-guide PDFs | 📋 planned |
+| `v1.1.0` | M9 | Rotator: Discovery Drive (rotctl TCP / EasyComm II) | 📋 planned |
+
+The post-v0.6 milestones are specified in `plans/roadmap-post-v0.6.md` — they build while
+waiting for first light and none of them move the `v1.0.0` gate.
 
 ## Quickstart (dev)
 
