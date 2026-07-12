@@ -1,0 +1,29 @@
+{# Before/after RFI-sweep summary (roadmap M6). Expects `rfi_comparison` (the
+   dict from rfi_sweep_comparison) — render nothing when absent. #}
+{% if rfi_comparison %}
+<section class="pane pad">
+  <h2>RFI before/after</h2>
+  <p class="muted">
+    Comparing capture #{{ rfi_comparison.before_id }} (before) with
+    #{{ rfi_comparison.after_id }} (after), bin-for-bin.
+    {% if rfi_comparison.n_risen %}
+    <b>{{ rfi_comparison.n_risen }}</b> bin(s) rose ≥ {{ "%.0f"|format(rfi_comparison.rise_db) }} dB.
+    {% else %}
+    No bin rose ≥ {{ "%.0f"|format(rfi_comparison.rise_db) }} dB — the environment held steady.
+    {% endif %}
+  </p>
+  {% if rfi_comparison.risen %}
+  <table class="list">
+    <tr><th>frequency</th><th>before</th><th>after</th><th>Δ</th></tr>
+    {% for r in rfi_comparison.risen %}
+    <tr>
+      <td>{{ "%.3f"|format(r.freq_hz / 1e6) }} MHz</td>
+      <td>{{ "%.1f"|format(r.before_db) }} dB</td>
+      <td>{{ "%.1f"|format(r.after_db) }} dB</td>
+      <td><b>+{{ "%.1f"|format(r.delta_db) }} dB</b></td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% endif %}
+</section>
+{% endif %}

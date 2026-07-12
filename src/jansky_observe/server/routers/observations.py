@@ -19,6 +19,7 @@ from pydantic import BaseModel
 from sqlalchemy import func
 from sqlmodel import Session, col, select
 
+from jansky_observe.capture.hackrf_sweep import rfi_sweep_comparison
 from jansky_observe.models import (
     Capture,
     ChecklistItemState,
@@ -109,6 +110,7 @@ def _detail_context(session: Session, observation: Observation) -> dict[str, Any
         "required_ok": required_items_ticked(session, observation),
         "captures": captures,
         "capture_results": capture_results,
+        "rfi_comparison": rfi_sweep_comparison(captures),
     }
 
 

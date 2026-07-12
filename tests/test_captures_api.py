@@ -485,3 +485,57 @@ def test_detail_page_shows_classify_button_and_verdicts(
 
     body = client.get(f"/observations/{obs_id}").text
     assert "detected" in body  # existing results render inline on reload
+
+
+def _rfi_observation(engine: Engine) -> int:
+    """Create an observation of the 'RFI survey @ 1420' type."""
+    with Session(engine) as session:
+        obs_type = session.exec(
+            select(ObservationType).where(ObservationType.name == "RFI survey @ 1420")
+        ).one()
+        source = session.exec(select(RadioSource)).first()
+        assert obs_type.id is not None and source is not None and source.id is not None
+        observation = Observation(
+            name="rfi check",
+            observation_type_id=obs_type.id,
+            station_id=1,
+            location_id=1,
+            source_id=source.id,
+            status="running",
+            actual_start=utcnow(),
+        )
+        session.add(observation)
+        session.commit()
+        session.refresh(observation)
+        assert observation.id is not None
+        return observation.id
+
+
+def _write_sweep_csv(path: Path, powers: list[float]) -> Path:
+    hz_low, width = 1_419_000_000.0, 1_000_000.0
+    path.parent.mkdir(parents=True, exist_ok=True)
+    row = f"2026-01-01, 00:00:00, {hz_low}, {hz_low + 4 * width}, {width}, 20, "
+    path.write_text(row + ", ".join(str(p) for p in powers) + "\n")
+    return path
+
+
+def test_detail_page_shows_rfi_before_after(client: TestClient, engine: Engine, tmp_path) -> None:
+    obs_id = _rfi_observation(engine)
+    before = _write_sweep_csv(tmp_path / "captures" / "before.csv", [-70, -68, -71, -69])
+    after = _write_sweep_csv(tmp_path / "captures" / "after.csv", [-70, -50, -71, -69])
+    _add_capture(engine, before, fmt="hackrf_sweep_csv", observation_id=obs_id)
+    _add_capture(engine, after, fmt="hackrf_sweep_csv", observation_id=obs_id)
+
+    body = client.get(f"/observations/{obs_id}").text
+    assert "RFI before/after" in body
+    assert "1420.500 MHz" in body  # the risen bin (1420.5 MHz)
+    assert "+18.0 dB" in body
+
+
+def test_detail_page_no_rfi_section_with_single_sweep(
+    client: TestClient, engine: Engine, tmp_path
+) -> None:
+    obs_id = _rfi_observation(engine)
+    only = _write_sweep_csv(tmp_path / "captures" / "only.csv", [-70, -68, -71, -69])
+    _add_capture(engine, only, fmt="hackrf_sweep_csv", observation_id=obs_id)
+    assert "RFI before/after" not in client.get(f"/observations/{obs_id}").text
