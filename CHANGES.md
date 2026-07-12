@@ -6,6 +6,42 @@ milestones**). Work that landed outside a milestone gets a brief summary under t
 that shipped it. Maintained as part of `/release` — a release isn't finished until its
 section exists here.
 
+## v0.7.0 — 2026-07-12 — M6 "Station cockpit"
+
+Everything a glance at the UI should answer, plus operator-comfort. Seven pieces; none
+move the `v1.0.0` gate (`plans/roadmap-post-v0.6.md`).
+
+- **Diagnostics bundle** (#13): `GET /api/diagnostics` + the `get_diagnostics` MCP tool
+  (now 18 tools) — a best-effort debug bundle (systemd units → SDR USB enumeration →
+  capture-daemon reachability + last-frame age → Pi thermals → disk → DB schema version →
+  journal errors), each check degrading to `"unavailable"` off the Pi. `/troubleshoot-chain`
+  calls it first.
+- **Status bar** (#15): a `#cockpit-bar` on every page — UTC/local clocks + LST (astropy),
+  the active-station chip (Δaz/Δel or "uncalibrated"), the source badge (source + fps + a
+  stale dot), a ~15-min-cached weather chip, and the disk gauge (free + estimated SigMF
+  hours, amber < 20 % / red < 10 %). `GET /api/status_bar`.
+- **Archive / soft-delete** (#17): `POST /observations/{id}/archive|unarchive` hides an
+  observation from the default list *and* the MCP surface (restorable; `?show_archived=1`
+  reveals). `POST /captures/{id}/purge` reclaims a capture's on-disk file(s) while keeping
+  the row + provenance. All HTML-only — no new MCP verbs. Migrations 3 (`observation.
+  archived_at`) + 4 (`capture.purged_at`).
+- **Dark mode + localization** (#18): a CSS-variable theme (dark default, light palette,
+  `prefers-color-scheme` fallback) with an auto→light→dark toggle; the waterfall canvas
+  tracks the theme. Timestamps render in the viewer's locale or UTC (toggle); UTC stays
+  canonical in the DB and exports.
+- **Spectrum audio** (#19): client-side WebAudio sonification of the live PSD — four modes
+  (receiver / doppler / geiger / drone). Aesthetic only; guarded on `AudioContext`.
+- **FPS knob + smooth-scroll** (#20): `--fps` is now settable from `/etc/default/jansky-
+  observe` (`JANSKY_OBSERVE_FPS`); the waterfall interpolates a sub-frame smooth scroll
+  (honors `prefers-reduced-motion`).
+- **RFI-survey template** (#21): a seeded "RFI survey @ 1420" ObservationType (migration 5)
+  with a before/after checklist; `compare_sweeps` summarizes which bins rose, on the
+  observation detail and in the PDF report.
+
+Also since v0.6.1: GitHub Sponsors + Ko-fi funding links and badges (#11, #12), the
+roadmap-order/wishlist corrections and `install.sh --reset-data` (#12), and removal of the
+internal funding-plan doc (#16). Schema is at `user_version` 5.
+
 ## v0.6.1 — 2026-07-12
 
 Maintenance release, no milestone.
