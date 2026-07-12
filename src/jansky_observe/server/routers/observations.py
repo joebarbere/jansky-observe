@@ -16,6 +16,7 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Form, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from pydantic import BaseModel
+from sqlalchemy import func
 from sqlmodel import Session, col, select
 
 from jansky_observe.models import (
@@ -162,18 +163,66 @@ def start_observation(session: Session, observation: Observation) -> None:
 
 
 @router.get("/observations", response_class=HTMLResponse)
-def observations_list(request: Request, session: SessionDep) -> HTMLResponse:
-    """All observations, newest first, status-badged."""
-    observations = session.exec(
-        select(Observation).order_by(col(Observation.created_at).desc(), col(Observation.id).desc())
-    ).all()
+def observations_list(
+    request: Request, session: SessionDep, show_archived: int = 0
+) -> HTMLResponse:
+    """Active observations, newest first, status-badged. Archived (soft-deleted)
+    observations are hidden by default; ``?show_archived=1`` reveals them in a
+    separate, restorable section (roadmap M6)."""
+    ordered = select(Observation).order_by(
+        col(Observation.created_at).desc(), col(Observation.id).desc()
+    )
+    active = session.exec(ordered.where(col(Observation.archived_at).is_(None))).all()
+    archived = (
+        session.exec(ordered.where(col(Observation.archived_at).is_not(None))).all()
+        if show_archived
+        else []
+    )
+    archived_count = session.exec(
+        select(func.count())
+        .select_from(Observation)
+        .where(col(Observation.archived_at).is_not(None))
+    ).one()
     types = {t.id: t.name for t in session.exec(select(ObservationType)).all()}
     sources = {s.id: s.name for s in session.exec(select(RadioSource)).all()}
     return TEMPLATES.TemplateResponse(
         request,
         "observations_list.html",
-        {"observations": observations, "types": types, "sources": sources},
+        {
+            "observations": active,
+            "archived": archived,
+            "archived_count": archived_count,
+            "show_archived": bool(show_archived),
+            "types": types,
+            "sources": sources,
+        },
     )
+
+
+@router.post("/observations/{obs_id}/archive")
+def observation_archive(session: SessionDep, obs_id: int) -> RedirectResponse:
+    """Soft-delete: hide the observation from the default lists and the MCP
+    surface. Restorable — the row and all its provenance are untouched
+    (roadmap M6). HTML-only, never an MCP verb (same principle as photo delete)."""
+    observation = get_or_404(session, Observation, obs_id)
+    if observation.archived_at is None:
+        observation.archived_at = utcnow()
+        observation.updated_at = utcnow()
+        session.add(observation)
+        session.commit()
+    return _see_other("/observations")
+
+
+@router.post("/observations/{obs_id}/unarchive")
+def observation_unarchive(session: SessionDep, obs_id: int) -> RedirectResponse:
+    """Restore a soft-deleted observation (roadmap M6). HTML-only."""
+    observation = get_or_404(session, Observation, obs_id)
+    if observation.archived_at is not None:
+        observation.archived_at = None
+        observation.updated_at = utcnow()
+        session.add(observation)
+        session.commit()
+    return _see_other(f"/observations/{obs_id}")
 
 
 @router.get("/observations/{obs_id}", response_class=HTMLResponse)
@@ -343,9 +392,13 @@ def _observation_summary(
 
 @router.get("/api/observations")
 def api_observations(session: SessionDep) -> list[dict[str, Any]]:
-    """All observations, newest first (mirror of the list page)."""
+    """Active observations, newest first (mirror of the list page). Archived
+    (soft-deleted) observations are excluded — they are HTML-only and never
+    exposed over MCP (roadmap M6)."""
     observations = session.exec(
-        select(Observation).order_by(col(Observation.created_at).desc(), col(Observation.id).desc())
+        select(Observation)
+        .where(col(Observation.archived_at).is_(None))
+        .order_by(col(Observation.created_at).desc(), col(Observation.id).desc())
     ).all()
     types = {t.id: t.name for t in session.exec(select(ObservationType)).all()}
     sources = {s.id: s.name for s in session.exec(select(RadioSource)).all()}

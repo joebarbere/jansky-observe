@@ -75,6 +75,10 @@ body {
 .cb-dot.cb-warn { background: var(--warn); }
 .cb-dot.cb-bad { background: var(--bad); }
 
+/* Archived / purged rows (roadmap M6): present but visually de-emphasised. */
+.list tr.purged td { opacity: 0.55; }
+.list.archived td { color: var(--muted); }
+
 .badge {
   padding: 0.1rem 0.55rem;
   border-radius: 3px;

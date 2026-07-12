@@ -221,7 +221,7 @@ def test_api_pointing_single_source(client: TestClient, engine: Engine) -> None:
 
 
 def test_observations_list_empty(client: TestClient) -> None:
-    assert "No observations yet" in client.get("/observations").text
+    assert "No active observations" in client.get("/observations").text
     assert client.get("/api/observations").json() == []
 
 
@@ -253,6 +253,35 @@ def test_observations_list_newest_first(client: TestClient, engine: Engine) -> N
     _create_observation(client, engine, name="second")
     names = [o["name"] for o in client.get("/api/observations").json()]
     assert names == ["second", "first"]
+
+
+def test_archive_hides_from_list_and_mcp_then_restores(client: TestClient, engine: Engine) -> None:
+    keep = _create_observation(client, engine, name="keep")
+    junk = _create_observation(client, engine, name="qa junk")
+
+    # Archive the junk observation.
+    resp = client.post(f"/observations/{junk}/archive", follow_redirects=False)
+    assert resp.status_code == 303
+
+    # Hidden from the default HTML list and the MCP-facing JSON list.
+    names = [o["name"] for o in client.get("/api/observations").json()]
+    assert names == ["keep"]
+    page = client.get("/observations").text
+    assert "qa junk" not in page
+    assert "Show archived (1)" in page
+
+    # Revealed on request, with a restore control; the row still exists.
+    shown = client.get("/observations?show_archived=1").text
+    assert "qa junk" in shown
+    assert f"/observations/{junk}/unarchive" in shown
+    assert client.get(f"/api/observations/{junk}").json()["name"] == "qa junk"
+
+    # Restore brings it back to the active list.
+    resp = client.post(f"/observations/{junk}/unarchive", follow_redirects=False)
+    assert resp.status_code == 303
+    names = [o["name"] for o in client.get("/api/observations").json()]
+    assert set(names) == {"keep", "qa junk"}
+    assert keep  # (silence unused)
 
 
 def test_api_checklist_tick_records_by_and_when(client: TestClient, engine: Engine) -> None:

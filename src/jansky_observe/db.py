@@ -85,9 +85,34 @@ def _migration_2_station_stellarium_url(conn: Connection) -> None:
         conn.exec_driver_sql("ALTER TABLE station ADD COLUMN stellarium_url VARCHAR")
 
 
+def _migration_3_observation_archived_at(conn: Connection) -> None:
+    """Add ``observation.archived_at`` — the soft-delete timestamp (roadmap M6).
+
+    Nullable, no default: ``NULL`` means "active". Guarded on ``PRAGMA
+    table_info`` because migration 1 builds the *latest* schema — on a fresh
+    database the column already exists when this runs, and both paths must land
+    on the identical schema.
+    """
+    columns = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(observation)")}
+    if "archived_at" not in columns:
+        conn.exec_driver_sql("ALTER TABLE observation ADD COLUMN archived_at DATETIME")
+
+
+def _migration_4_capture_purged_at(conn: Connection) -> None:
+    """Add ``capture.purged_at`` — when the on-disk file(s) were reclaimed while
+    the row + provenance were kept (roadmap M6). Nullable, no default; guarded
+    on ``PRAGMA table_info`` for the same reason as migration 3.
+    """
+    columns = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(capture)")}
+    if "purged_at" not in columns:
+        conn.exec_driver_sql("ALTER TABLE capture ADD COLUMN purged_at DATETIME")
+
+
 MIGRATIONS: list[tuple[int, Callable[[Connection], None]]] = [
     (1, _migration_1_initial_schema),
     (2, _migration_2_station_stellarium_url),
+    (3, _migration_3_observation_archived_at),
+    (4, _migration_4_capture_purged_at),
 ]
 
 

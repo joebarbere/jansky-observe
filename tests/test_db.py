@@ -58,42 +58,45 @@ def test_appended_migration_runs_exactly_once(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """An old database walks forward through a new migration exactly once."""
+    latest = max(version for version, _ in db.MIGRATIONS)
+    nxt = latest + 1
     engine = db.init_db(tmp_path / "data")  # existing station at the current latest version
-    assert _user_version(engine) == 2
+    assert _user_version(engine) == latest
 
     calls: list[int] = []
 
-    def _migration_3_station_backlash(conn: Connection) -> None:
-        calls.append(3)
+    def _migration_next_station_backlash(conn: Connection) -> None:
+        calls.append(nxt)
         conn.exec_driver_sql(
             "ALTER TABLE station ADD COLUMN backlash_az_deg FLOAT NOT NULL DEFAULT 0.0"
         )
 
-    monkeypatch.setattr(db, "MIGRATIONS", [*db.MIGRATIONS, (3, _migration_3_station_backlash)])
+    monkeypatch.setattr(db, "MIGRATIONS", [*db.MIGRATIONS, (nxt, _migration_next_station_backlash)])
     db.migrate(engine)
-    assert calls == [3]
-    assert _user_version(engine) == 3
+    assert calls == [nxt]
+    assert _user_version(engine) == nxt
     columns = {c["name"] for c in inspect(engine).get_columns("station")}
     assert "backlash_az_deg" in columns
 
     db.migrate(engine)  # already current — must not run again
-    assert calls == [3]
-    assert _user_version(engine) == 3
+    assert calls == [nxt]
+    assert _user_version(engine) == nxt
 
 
 def test_fresh_db_ends_at_latest_appended_version(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    nxt = max(version for version, _ in db.MIGRATIONS) + 1
     calls: list[int] = []
 
-    def _migration_3(conn: Connection) -> None:
-        calls.append(3)
+    def _migration_next(conn: Connection) -> None:
+        calls.append(nxt)
         conn.exec_driver_sql("ALTER TABLE station ADD COLUMN test_col FLOAT DEFAULT 0.0")
 
-    monkeypatch.setattr(db, "MIGRATIONS", [*db.MIGRATIONS, (3, _migration_3)])
+    monkeypatch.setattr(db, "MIGRATIONS", [*db.MIGRATIONS, (nxt, _migration_next)])
     engine = db.init_db(tmp_path / "data")
-    assert calls == [3]
-    assert _user_version(engine) == 3
+    assert calls == [nxt]
+    assert _user_version(engine) == nxt
 
 
 def test_migrate_rejects_non_increasing_versions(
@@ -131,7 +134,7 @@ def _db_at_version_1(tmp_path: Path, truly_old: bool) -> Engine:
 
 def test_migration_2_fresh_db_has_stellarium_url(tmp_path: Path) -> None:
     engine = db.init_db(tmp_path / "data")
-    assert _user_version(engine) == 2
+    assert _user_version(engine) == max(version for version, _ in db.MIGRATIONS)
     assert "stellarium_url" in _station_columns(engine)
     with db.session(engine) as s:
         assert s.exec(select(Station)).one().stellarium_url is None
@@ -144,7 +147,7 @@ def test_migration_2_upgrades_version_1_db_keeping_data(tmp_path: Path, truly_ol
     assert ("stellarium_url" in _station_columns(engine)) is not truly_old
 
     db.migrate(engine)
-    assert _user_version(engine) == 2
+    assert _user_version(engine) == max(version for version, _ in db.MIGRATIONS)
     assert "stellarium_url" in _station_columns(engine)
     with db.session(engine) as s:
         station = s.exec(select(Station)).one()
@@ -152,6 +155,54 @@ def test_migration_2_upgrades_version_1_db_keeping_data(tmp_path: Path, truly_ol
         assert station.stellarium_url is None
 
     db.migrate(engine)  # re-run: a no-op
-    assert _user_version(engine) == 2
+    assert _user_version(engine) == max(version for version, _ in db.MIGRATIONS)
     with db.session(engine) as s:
         assert s.exec(select(Station)).one().notes == "pre-upgrade data"
+
+
+# ---- migrations 3 & 4: observation.archived_at, capture.purged_at (roadmap M6) ----
+
+
+def _columns(engine: Engine, table: str) -> set[str]:
+    return {c["name"] for c in inspect(engine).get_columns(table)}
+
+
+def test_migration_3_4_fresh_db_has_new_columns(tmp_path: Path) -> None:
+    engine = db.init_db(tmp_path / "data")
+    assert _user_version(engine) == max(version for version, _ in db.MIGRATIONS)
+    assert "archived_at" in _columns(engine, "observation")
+    assert "purged_at" in _columns(engine, "capture")
+
+
+def test_migration_3_4_upgrade_from_version_2_keeps_data(tmp_path: Path) -> None:
+    # Build a database stopped at version 2 (through migration 2), with a row.
+    engine = db.get_engine(tmp_path / "data")
+    with engine.begin() as conn:
+        db.MIGRATIONS[0][1](conn)  # migration 1: full schema + seeds
+        db.MIGRATIONS[1][1](conn)  # migration 2: stellarium_url guard
+        # Simulate a pre-M6 database: drop the columns create_all built.
+        conn.exec_driver_sql("ALTER TABLE observation DROP COLUMN archived_at")
+        conn.exec_driver_sql("ALTER TABLE capture DROP COLUMN purged_at")
+        conn.exec_driver_sql(
+            "INSERT INTO observation (name, observation_type_id, station_id, "
+            "location_id, source_id, status, notes, created_at, updated_at) "
+            "VALUES ('old obs', 1, 1, 1, 1, 'done', 'keep me', "
+            "'2026-07-01T00:00:00', '2026-07-01T00:00:00')"
+        )
+        conn.exec_driver_sql("PRAGMA user_version = 2")
+    assert _user_version(engine) == 2
+    assert "archived_at" not in _columns(engine, "observation")
+
+    db.migrate(engine)
+    assert _user_version(engine) == max(version for version, _ in db.MIGRATIONS)
+    assert "archived_at" in _columns(engine, "observation")
+    assert "purged_at" in _columns(engine, "capture")
+    with engine.connect() as conn:
+        row = conn.exec_driver_sql(
+            "SELECT notes, archived_at FROM observation WHERE name = 'old obs'"
+        ).one()
+    assert row[0] == "keep me"  # pre-existing data survived
+    assert row[1] is None  # new column defaults to NULL (active)
+
+    db.migrate(engine)  # re-run is a no-op
+    assert _user_version(engine) == max(version for version, _ in db.MIGRATIONS)
