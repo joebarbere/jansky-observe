@@ -98,14 +98,13 @@ nothing by design.
 
 ## Current status
 
-M0–M3 have shipped — `v0.4.0` (confirmation: the `hline_v1` classifier, LSR spectral axes,
-the live HI badge, classify/spectrum endpoints and their MCP tools). **M4 (reports & photos)
-is in progress on `m4/reports-photos`:** photo ingest/resize with a highlight photo per
-observation (`photos.py`), the WeasyPrint PDF report (`POST /api/observations/{id}/report`
-→ `data/observations/<id>/report.pdf`, contents per plan §7), Virgo-CSV + ezRA-txt exporters
-(`export/`, `GET /api/captures/{id}/export?format=...` — one-way conveniences, plan §4.7),
-and two new MCP tools (`export_capture`, `build_report`). M5 (polish, the `v1.0.0`
-candidate) is next. The HI4PI cross-check (`hi4pi_xcheck`, v2) remains **deferred to
+M0–M4 have shipped — `v0.5.0` is live on the station: photo ingest/resize with a highlight
+photo per observation (`photos.py`), the WeasyPrint PDF report
+(`POST /api/observations/{id}/report` → `data/observations/<id>/report.pdf`, contents per
+plan §7), Virgo-CSV + ezRA-txt exporters (`export/`,
+`GET /api/captures/{id}/export?format=...` — one-way conveniences, plan §4.7), and 16 MCP
+tools. Every plan-§12.6 Claude deliverable is shipped. **M5 (polish — Stellarium, HackRF
+RFI sweep, gpsd; the `v1.0.0` candidate) is next.** The HI4PI cross-check (`hi4pi_xcheck`, v2) remains **deferred to
 jansky-research plan 78** per plan §6 — the comparison harness is built once there and
 consumed here. The full plan lives in `plans/jansky_observe.md` — read it before any
 feature work.
