@@ -11,7 +11,15 @@
   <form method="post" action="/observations/{{ obs.id }}/stop"><button class="btn btn-stop" type="submit">Stop observation</button></form>
   <form method="post" action="/observations/{{ obs.id }}/abort"><button class="btn btn-stop" type="submit">Abort</button></form>
   {% endif %}
+  {% if obs.archived_at is none %}
+  <form method="post" action="/observations/{{ obs.id }}/archive"><button class="btn btn-small" type="submit" title="hide from lists — restorable, nothing is deleted">Archive</button></form>
+  {% else %}
+  <form method="post" action="/observations/{{ obs.id }}/unarchive"><button class="btn btn-small" type="submit">Restore</button></form>
+  {% endif %}
 </div>
+{% if obs.archived_at is not none %}
+<div class="pane pad notice">Archived {{ obs.archived_at | dt }} — hidden from the default list and the MCP surface. Restorable; nothing has been deleted.</div>
+{% endif %}
 
 {% if stopped %}
 <div class="pane pad notice">Observation stopped — work the teardown, then record teardown notes below.</div>
@@ -95,14 +103,24 @@
   <h2>Captures</h2>
   {% if captures %}
   <table class="list">
-    <tr><th>device</th><th>format</th><th>file</th><th>size</th><th>start</th><th>end</th><th>confirmation</th></tr>
+    <tr><th>device</th><th>format</th><th>file</th><th>size</th><th>start</th><th>end</th><th>confirmation</th><th></th></tr>
     {% for c in captures %}
-    <tr>
+    <tr{% if c.purged_at is not none %} class="purged"{% endif %}>
       <td>{{ c.device }}</td><td>{{ c.format }}</td><td>{{ c.path }}</td>
       <td>{{ "%.1f"|format(c.size_bytes / 1e6) }} MB</td>
       <td>{{ c.start | dt }}</td><td>{{ c.end | dt }}</td>
       <td id="cap-confirm-{{ c.id }}">
         {% with capture = c, results = capture_results.get(c.id, []) %}{% include "_capture_results.html" %}{% endwith %}
+      </td>
+      <td>
+        {% if c.purged_at is not none %}
+        <span class="muted" title="files reclaimed {{ c.purged_at | dt }}; row + provenance kept">files purged</span>
+        {% else %}
+        <form method="post" action="/captures/{{ c.id }}/purge"
+              onsubmit="return confirm('Delete this capture\'s file(s) on disk? The record and its analysis are kept; the raw bytes cannot be recovered.');">
+          <button class="btn btn-small" type="submit" title="reclaim disk; keep the record + provenance">Purge files</button>
+        </form>
+        {% endif %}
       </td>
     </tr>
     {% endfor %}

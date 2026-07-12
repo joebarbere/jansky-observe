@@ -27,7 +27,7 @@ from typing import Any, Literal
 import numpy as np
 from astropy.coordinates import SkyCoord
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from pydantic import BaseModel
 from sqlalchemy import Engine
 from sqlmodel import Session, col, select
@@ -381,8 +381,40 @@ def api_captures_import(request: Request, session: SessionDep) -> dict[str, int]
 
 @router.get("/api/captures/{capture_id}")
 def api_capture_meta(session: SessionDep, capture_id: int) -> dict[str, Any]:
-    """One capture in full: path, format, size, times, SDR settings, links."""
+    """One capture in full: path, format, size, times, SDR settings, links
+    (``purged_at`` is set once the on-disk file(s) were reclaimed)."""
     return get_or_404(session, Capture, capture_id).model_dump()
+
+
+def _capture_file_paths(capture: Capture) -> list[Path]:
+    """On-disk file(s) backing a capture. SigMF is a ``.sigmf-data`` +
+    ``.sigmf-meta`` pair around the stored base path; every other format is the
+    single stored file."""
+    path = Path(capture.path)
+    if capture.format == "sigmf":
+        base = path.with_suffix("") if path.suffix in {".sigmf-data", ".sigmf-meta"} else path
+        return [base.with_suffix(".sigmf-data"), base.with_suffix(".sigmf-meta"), path]
+    return [path]
+
+
+@router.post("/captures/{capture_id}/purge")
+def capture_purge(session: SessionDep, capture_id: int) -> RedirectResponse:
+    """Reclaim a capture's on-disk file(s) — the 43 GB/h SigMF reclaim path
+    (roadmap M6) — while keeping the DB row and all provenance (settings,
+    ClassifierResult rows). Idempotent; HTML-only, never an MCP verb."""
+    capture = get_or_404(session, Capture, capture_id)
+    for file in dict.fromkeys(_capture_file_paths(capture)):  # de-dup, keep order
+        try:
+            file.unlink(missing_ok=True)
+        except OSError:  # a directory in the way, permissions — best-effort reclaim
+            pass
+    if capture.purged_at is None:
+        capture.purged_at = utcnow()
+        session.add(capture)
+        session.commit()
+    if capture.observation_id is not None:
+        return RedirectResponse(f"/observations/{capture.observation_id}", status_code=303)
+    return RedirectResponse("/observations", status_code=303)
 
 
 @router.get("/api/captures/{capture_id}/spectrum")

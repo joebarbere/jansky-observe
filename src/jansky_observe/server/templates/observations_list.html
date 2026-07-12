@@ -5,7 +5,7 @@
 <p><a class="btn" href="/wizard">New session</a></p>
 {% if observations %}
 <table class="list">
-  <tr><th>name</th><th>status</th><th>type</th><th>source</th><th>started</th><th>ended</th></tr>
+  <tr><th>name</th><th>status</th><th>type</th><th>source</th><th>started</th><th>ended</th><th></th></tr>
   {% for o in observations %}
   <tr>
     <td><a href="/observations/{{ o.id }}">{{ o.name }}</a></td>
@@ -14,10 +14,39 @@
     <td>{{ sources.get(o.source_id, "?") }}</td>
     <td>{{ o.actual_start | dt }}</td>
     <td>{{ o.actual_end | dt }}</td>
+    <td><form method="post" action="/observations/{{ o.id }}/archive">
+      <button class="btn btn-small" type="submit" title="hide from the list (restorable)">Archive</button>
+    </form></td>
   </tr>
   {% endfor %}
 </table>
 {% else %}
-<p class="muted">No observations yet — start one with the session wizard.</p>
+<p class="muted">No active observations — start one with the session wizard.</p>
+{% endif %}
+
+{% if show_archived %}
+<h2 class="muted">Archived ({{ archived_count }})</h2>
+{% if archived %}
+<table class="list archived">
+  <tr><th>name</th><th>status</th><th>type</th><th>source</th><th>archived</th><th></th></tr>
+  {% for o in archived %}
+  <tr>
+    <td><a href="/observations/{{ o.id }}">{{ o.name }}</a></td>
+    <td><span class="badge {{ o.status }}">{{ o.status }}</span></td>
+    <td>{{ types.get(o.observation_type_id, "?") }}</td>
+    <td>{{ sources.get(o.source_id, "?") }}</td>
+    <td>{{ o.archived_at | dt }}</td>
+    <td><form method="post" action="/observations/{{ o.id }}/unarchive">
+      <button class="btn btn-small" type="submit">Restore</button>
+    </form></td>
+  </tr>
+  {% endfor %}
+</table>
+{% else %}
+<p class="muted">No archived observations.</p>
+{% endif %}
+<p><a href="/observations">Hide archived</a></p>
+{% elif archived_count %}
+<p class="muted"><a href="/observations?show_archived=1">Show archived ({{ archived_count }})</a></p>
 {% endif %}
 {% endblock %}

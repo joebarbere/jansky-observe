@@ -183,6 +183,10 @@ class Observation(SQLModel, table=True):
     computed_el_deg: float | None = None
     #: Markdown session notes.
     notes: str = ""
+    #: Soft-delete timestamp (roadmap M6). ``None`` = active; a value hides the
+    #: observation from the default lists and the MCP surface, but the row and
+    #: all its provenance stay — restorable, never destroyed. HTML-only.
+    archived_at: datetime | None = None
     created_at: datetime = Field(default_factory=utcnow)
     updated_at: datetime = Field(default_factory=utcnow)
 
@@ -231,6 +235,10 @@ class Capture(SQLModel, table=True):
     #: Full SDR settings: center freq, sample rate, gains, bias-tee state,
     #: FFT size, integration time.
     sdr_settings: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON))
+    #: When the on-disk file(s) were purged to reclaim space (roadmap M6). The
+    #: row, its settings, and any ClassifierResult provenance survive; only the
+    #: bytes are gone. ``None`` = files present. HTML-only.
+    purged_at: datetime | None = None
     created_at: datetime = Field(default_factory=utcnow)
 
 

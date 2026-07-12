@@ -311,7 +311,42 @@ def test_capture_meta(client: TestClient, engine: Engine, tmp_path) -> None:
     body = client.get(f"/api/captures/{capture_id}").json()
     assert body["path"] == str(npz)
     assert body["sdr_settings"]["gain"] == 15
+    assert body["purged_at"] is None
     assert client.get("/api/captures/9999").status_code == 404
+
+
+def test_purge_deletes_npz_but_keeps_row(client: TestClient, engine: Engine, tmp_path) -> None:
+    npz = _write_capture(tmp_path / "captures" / "c.npz")
+    obs_id = _running_observation(engine)
+    capture_id = _add_capture(engine, npz, observation_id=obs_id)
+    assert npz.exists()
+
+    resp = client.post(f"/captures/{capture_id}/purge", follow_redirects=False)
+    assert resp.status_code == 303
+    assert resp.headers["location"] == f"/observations/{obs_id}"
+
+    assert not npz.exists()  # file reclaimed
+    meta = client.get(f"/api/captures/{capture_id}").json()  # row + provenance kept
+    assert meta["id"] == capture_id
+    assert meta["purged_at"] is not None
+    assert meta["sdr_settings"]["gain"] == 15
+
+    # Idempotent: purging again is a no-op that still redirects.
+    assert client.post(f"/captures/{capture_id}/purge", follow_redirects=False).status_code == 303
+
+
+def test_purge_removes_both_sigmf_files(client: TestClient, engine: Engine, tmp_path) -> None:
+    data = _write_sigmf_pair(tmp_path / "captures" / "s")
+    meta = data.with_suffix(".sigmf-meta")
+    assert data.exists() and meta.exists()
+    # The daemon stores the base path for SigMF (control.py); mirror that.
+    capture_id = _add_capture(engine, tmp_path / "captures" / "s", fmt="sigmf")
+
+    resp = client.post(f"/captures/{capture_id}/purge", follow_redirects=False)
+    assert resp.status_code == 303
+    assert resp.headers["location"] == "/observations"  # no linked observation
+    assert not data.exists() and not meta.exists()
+    assert client.get(f"/api/captures/{capture_id}").json()["purged_at"] is not None
 
 
 # ---- spectrum ----------------------------------------------------------------------
