@@ -23,9 +23,13 @@ Environment=JANSKY_OBSERVE_DATA_DIR=/var/lib/jansky-observe
 # if absent), never by editing this unit. The EnvironmentFile line below overrides the
 # default above.
 Environment=JANSKY_OBSERVE_SOURCE=synthetic
+# Frame rate (roadmap M6): each row is an integrated spectrum, so this is a
+# spectrometer cadence, not a render limit — raising it trades integration per
+# row for smoother motion. Overridable in /etc/default/jansky-observe.
+Environment=JANSKY_OBSERVE_FPS=4.0
 EnvironmentFile=-/etc/default/jansky-observe
 WorkingDirectory=/var/lib/jansky-observe
-ExecStart=/opt/jansky-observe/venv/bin/jansky-observe-capture --source ${JANSKY_OBSERVE_SOURCE}
+ExecStart=/opt/jansky-observe/venv/bin/jansky-observe-capture --source ${JANSKY_OBSERVE_SOURCE} --fps ${JANSKY_OBSERVE_FPS}
 Restart=on-failure
 RestartSec=2
 

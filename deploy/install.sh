@@ -122,9 +122,13 @@ Environment=JANSKY_OBSERVE_DATA_DIR=/var/lib/jansky-observe
 # if absent), never by editing this unit. The EnvironmentFile line below overrides the
 # default above.
 Environment=JANSKY_OBSERVE_SOURCE=synthetic
+# Frame rate (roadmap M6): each row is an integrated spectrum, so this is a
+# spectrometer cadence, not a render limit — raising it trades integration per
+# row for smoother motion. Overridable in /etc/default/jansky-observe.
+Environment=JANSKY_OBSERVE_FPS=4.0
 EnvironmentFile=-/etc/default/jansky-observe
 WorkingDirectory=/var/lib/jansky-observe
-ExecStart=/opt/jansky-observe/venv/bin/jansky-observe-capture --source ${JANSKY_OBSERVE_SOURCE}
+ExecStart=/opt/jansky-observe/venv/bin/jansky-observe-capture --source ${JANSKY_OBSERVE_SOURCE} --fps ${JANSKY_OBSERVE_FPS}
 Restart=on-failure
 RestartSec=2
 
@@ -340,12 +344,19 @@ install_default_file() {
     log "writing ${DEFAULT_FILE}"
     install -d "$(dirname "${DEFAULT_FILE}")"
     cat > "${DEFAULT_FILE}" <<'DEFAULT_EOF'
-# jansky-observe capture source — read by jansky-observe-capture.service.
+# jansky-observe capture daemon settings — read by jansky-observe-capture.service.
 #
+# Source:
 #   synthetic  noise + fake-HI frames, no hardware (the installed default)
 #   airspy     the real Airspy Mini — switch to this at first light, then
 #              `sudo systemctl restart jansky-observe-capture`
 JANSKY_OBSERVE_SOURCE=synthetic
+
+# Frame rate (frames/second). Each waterfall row is an *integrated* spectrum, so
+# 4 fps is a spectrometer cadence, not a rendering limit: raising it trades
+# integration time per row for smoother on-screen motion. Restart the daemon
+# after changing. (The browser can also interpolate the scroll cosmetically.)
+JANSKY_OBSERVE_FPS=4.0
 DEFAULT_EOF
 }
 
