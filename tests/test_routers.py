@@ -11,7 +11,7 @@ from sqlmodel import Session, select
 
 from jansky_observe.config import Settings
 from jansky_observe.db import init_db
-from jansky_observe.models import ObservationType, RadioSource
+from jansky_observe.models import ObservationType, RadioSource, Station
 from jansky_observe.seeds import RADIO_SOURCES
 from jansky_observe.server.app import create_app
 
@@ -159,6 +159,28 @@ def test_station_offsets_direct_update(client: TestClient) -> None:
     body = client.get("/station").text
     assert "Δaz +2.50°" in body
     assert "Δel -1.00°" in body
+
+
+def test_station_page_offers_stellarium_url_field(client: TestClient) -> None:
+    body = client.get("/station").text
+    assert 'name="stellarium_url"' in body
+    assert 'placeholder="http://desktop:8090"' in body
+
+
+def test_station_stellarium_url_save_and_clear(client: TestClient, engine: Engine) -> None:
+    resp = client.post(
+        "/station/stellarium",
+        data={"stellarium_url": "http://desktop:8090/"},  # trailing slash stripped
+        follow_redirects=False,
+    )
+    assert resp.status_code == 303
+    assert 'value="http://desktop:8090"' in client.get("/station").text
+    with Session(engine) as session:
+        assert session.exec(select(Station)).one().stellarium_url == "http://desktop:8090"
+
+    client.post("/station/stellarium", data={"stellarium_url": "   "})  # empty clears
+    with Session(engine) as session:
+        assert session.exec(select(Station)).one().stellarium_url is None
 
 
 # ---- whats_up + pointing ----------------------------------------------------------

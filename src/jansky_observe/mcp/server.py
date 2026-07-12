@@ -138,6 +138,21 @@ def build_mcp(app: FastAPI) -> FastMCP:
         return await _post_json(app, "/api/live/hi_badge/reset", {})
 
     @mcp.tool
+    async def start_rfi_sweep(
+        freq_lo_mhz: float = 1000, freq_hi_mhz: float = 2000
+    ) -> dict[str, Any]:
+        """Run a HackRF RFI survey sweep (plan §4.2): a pre-session look at what
+        the window pass-through actually sees, binned power over freq_lo..freq_hi
+        MHz. Blocking safe verb — the live frame stream pauses for the sweep's
+        duration (seconds). The raw hackrf_sweep CSV is persisted and registered
+        as a Capture (device hackrf, format hackrf_sweep_csv); returns its path,
+        capture_id, and a summary with the loudest bins averaged across sweeps.
+        Refused (409) while a capture is recording."""
+        return await _post_json(
+            app, "/api/rfi_sweep", {"freq_lo_mhz": freq_lo_mhz, "freq_hi_mhz": freq_hi_mhz}
+        )
+
+    @mcp.tool
     async def create_observation_draft(
         observation_type: str,
         source: str,

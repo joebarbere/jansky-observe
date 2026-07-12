@@ -270,3 +270,21 @@ def station_offsets(
     session.add(station)
     session.commit()
     return _see_other("/station")
+
+
+@router.post("/station/stellarium")
+def station_stellarium(
+    session: SessionDep,
+    stellarium_url: Annotated[str, Form()] = "",
+) -> RedirectResponse:
+    """Save the station's Stellarium RemoteControl URL (plan §4.3).
+
+    An empty field clears it (``None`` disables the integration); a trailing
+    slash is stripped so the client can join paths onto it.
+    """
+    station = default_station(session)
+    station.stellarium_url = stellarium_url.strip().rstrip("/") or None
+    station.updated_at = utcnow()
+    session.add(station)
+    session.commit()
+    return _see_other("/station")

@@ -31,6 +31,8 @@
   const startNpzBtn = document.getElementById("btn-start-npz");
   const startSigmfBtn = document.getElementById("btn-start-sigmf");
   const stopBtn = document.getElementById("btn-stop");
+  const rfiBtn = document.getElementById("btn-rfi-sweep");
+  const rfiResultEl = document.getElementById("rfi-result");
   const projNpzEl = document.getElementById("proj-npz");
   const projSigmfEl = document.getElementById("proj-sigmf");
   const capStateEl = document.getElementById("capture-state");
@@ -391,6 +393,7 @@
 
   // ---- capture panel -------------------------------------------------------
   let errorTimer = null;
+  let sweeping = false; // an RFI sweep round trip is in flight
 
   function showCaptureError(msg) {
     capErrorEl.textContent = msg;
@@ -437,6 +440,7 @@
     startNpzBtn.disabled = st.capturing;
     startSigmfBtn.disabled = st.capturing;
     stopBtn.disabled = !st.capturing;
+    rfiBtn.disabled = sweeping || st.capturing; // daemon refuses a sweep mid-capture
     capLiveEl.classList.toggle("hidden", !st.capturing);
 
     if (!st.capturing) {
@@ -459,6 +463,7 @@
     startNpzBtn.disabled = true;
     startSigmfBtn.disabled = true;
     stopBtn.disabled = true;
+    rfiBtn.disabled = true;
     capLiveEl.classList.add("hidden");
     overrunEl.classList.add("hidden");
     if (detail) showCaptureError(detail);
@@ -519,6 +524,54 @@
   });
   stopBtn.addEventListener("click", function () {
     captureAction("/api/capture/stop", null);
+  });
+
+  // ---- RFI sweep (plan §4.2/§5.2: HackRF pre-session survey) ----------------
+  function renderRfiResult(r) {
+    const range = r.freq_range_hz || [];
+    const top = (r.loudest || [])[0];
+    let text = (r.num_sweeps || "?") + " sweeps";
+    if (range.length === 2) {
+      text += " " + (range[0] / 1e6).toFixed(0) + "–" + (range[1] / 1e6).toFixed(0) + " MHz";
+    }
+    if (top) {
+      text +=
+        " — loudest: " +
+        (top.freq_hz / 1e6).toFixed(1) +
+        " MHz " +
+        top.power_db.toFixed(1) +
+        " dB";
+    }
+    if (r.capture_id != null) text += " (capture #" + r.capture_id + ")";
+    rfiResultEl.textContent = text;
+    rfiResultEl.classList.remove("hidden");
+  }
+
+  rfiBtn.addEventListener("click", async function () {
+    sweeping = true;
+    rfiBtn.disabled = true;
+    rfiResultEl.textContent = "sweeping… (live stream pauses for the sweep)";
+    rfiResultEl.classList.remove("hidden");
+    try {
+      const resp = await fetch("/api/rfi_sweep", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      if (!resp.ok) {
+        rfiResultEl.classList.add("hidden");
+        showCaptureError(await detailOf(resp));
+      } else {
+        renderRfiResult(await resp.json());
+      }
+    } catch (err) {
+      rfiResultEl.classList.add("hidden");
+      showCaptureError("RFI sweep failed: " + err);
+    } finally {
+      sweeping = false;
+      rfiBtn.disabled = false;
+      pollCaptureStatus();
+    }
   });
   // ---- HI badge (plan §5.2: "am I seeing it?") ------------------------------
   function renderHiBadge(b) {

@@ -1,0 +1,18 @@
+<div id="stellarium-result">
+  {% if mode == "unavailable" %}
+  <p class="warn-text">Stellarium unreachable — {{ error }}. Check that Stellarium is running
+    with the RemoteControl plugin enabled; the wizard works fine without it.</p>
+  {% elif mode == "focused" %}
+  <p>Stellarium focused on <b>{{ source.name }}</b>.
+    {% if agree %}<span class="muted">Stellarium agrees within 0.3°.</span>
+    {% elif warn %}<span class="warn-text">Stellarium differs by {{ "%.1f"|format(delta_deg) }}°
+      — trust astropy (authoritative for pointing, plan §4.3).</span>
+    {% else %}<span class="muted">Stellarium agrees within {{ "%.1f"|format(delta_deg) }}°.</span>
+    {% endif %}</p>
+  {% elif mode == "focused_no_info" %}
+  <p class="muted">Stellarium focused on {{ source.name }} (no az/alt reported back).</p>
+  {% else %}
+  <p class="muted">view slewed to az {{ "%.1f"|format(az_deg) }}° / el {{ "%.1f"|format(el_deg) }}°
+    ({{ source.name }} is not in Stellarium's catalogs).</p>
+  {% endif %}
+</div>

@@ -12,10 +12,15 @@ from __future__ import annotations
 
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Form, Request
+from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlmodel import Session, col, select
 
+from jansky_observe.astro.stellarium import (
+    StellariumClient,
+    StellariumUnavailable,
+    angular_separation_deg,
+)
 from jansky_observe.models import (
     ChecklistItemState,
     ChecklistTemplateItem,
@@ -113,8 +118,73 @@ def pointing_fragment(
     return TEMPLATES.TemplateResponse(
         request,
         "_pointing_info.html",
-        {"pointing": pointing, "weather": weather, "source": source},
+        {
+            "pointing": pointing,
+            "weather": weather,
+            "source": source,
+            "location_id": location_id,
+            "stellarium_url": station.stellarium_url,
+        },
     )
+
+
+_STELLARIUM_AGREE_DEG = 0.3
+_STELLARIUM_WARN_DEG = 1.0
+
+
+@router.post("/stellarium/show", response_class=HTMLResponse)
+def stellarium_show(
+    request: Request,
+    session: SessionDep,
+    source_id: Annotated[int, Form()],
+    location_id: Annotated[int, Form()],
+) -> HTMLResponse:
+    """htmx fragment: slew the desktop Stellarium view to the source (plan §4.3).
+
+    Focuses the source by name when Stellarium's catalogs know it, then reads
+    back Stellarium's az/alt and shows the delta against astropy's — agreement
+    within 0.3° is the happy path, above 1° a warning; **astropy is
+    authoritative** either way. Pseudo-sources Stellarium cannot find (e.g.
+    the HI regions) fall back to a plain view slew at the computed az/el.
+    A dead or unreachable Stellarium renders an inline message — the wizard
+    never blocks on it.
+    """
+    source = get_or_404(session, RadioSource, source_id)
+    location = get_or_404(session, Location, location_id)
+    station = default_station(session)
+    if not station.stellarium_url:
+        raise HTTPException(status_code=409, detail="no stellarium_url configured on the station")
+    pointing = source_pointing(source, location, station, full=False)
+    client = StellariumClient(station.stellarium_url)
+    context: dict[str, Any] = {
+        "source": source,
+        "az_deg": pointing["raw_az_deg"],
+        "el_deg": pointing["raw_el_deg"],
+    }
+    try:
+        if client.find_object(source.name) is not None and client.focus(source.name):
+            info = client.object_info(source.name)
+            az, alt = info.get("azimuth"), info.get("altitude")
+            if az is not None and alt is not None:
+                delta = angular_separation_deg(
+                    float(az), float(alt), pointing["raw_az_deg"], pointing["raw_el_deg"]
+                )
+                context.update(
+                    {
+                        "mode": "focused",
+                        "delta_deg": delta,
+                        "agree": delta <= _STELLARIUM_AGREE_DEG,
+                        "warn": delta > _STELLARIUM_WARN_DEG,
+                    }
+                )
+            else:
+                context["mode"] = "focused_no_info"
+        else:
+            client.slew_view(pointing["raw_az_deg"], pointing["raw_el_deg"])
+            context["mode"] = "slewed"
+    except StellariumUnavailable as exc:
+        context.update({"mode": "unavailable", "error": str(exc)})
+    return TEMPLATES.TemplateResponse(request, "_stellarium_result.html", context)
 
 
 @router.post("/create")
