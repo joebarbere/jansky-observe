@@ -363,7 +363,7 @@ grow_rootfs() {
 }
 
 run_install_in_guest() {
-    local scp_files=("${DEPLOY_DIR}/install.sh") install_args=(--jansky-ref v0.1.0)
+    local scp_files=("${DEPLOY_DIR}/install.sh") install_args=(--jansky-ref v0.2.0)
     # If a locally built wheel exists (make build), gate THAT instead of a published
     # release — this is how the pre-tag check exercises unreleased code.
     local wheel

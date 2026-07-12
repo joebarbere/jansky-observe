@@ -1,6 +1,6 @@
 [project]
 name = "jansky-observe"
-version = "0.6.0"
+version = "0.6.1"
 description = "Observation management for the Discovery Dish station: plan, run, and record attended radio observations. Sibling of the jansky course and jansky-research."
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
@@ -35,7 +35,7 @@ jansky-observe-capture = "jansky_observe.capture.daemon:main"
 
 # jansky is not on PyPI. Local development resolves the sibling checkout below;
 # release wheels are installed by deploy/install.sh, which installs jansky from
-# its git tag first (jansky @ git+https://github.com/joebarbere/jansky@v0.1.0),
+# its git tag first (jansky @ git+https://github.com/joebarbere/jansky@v0.2.0),
 # and CI checks the two repos out side by side (see .github/workflows/).
 [tool.uv.sources]
 jansky = { path = "../jansky", editable = true }

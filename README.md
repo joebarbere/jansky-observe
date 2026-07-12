@@ -28,10 +28,13 @@ flowchart LR
 
 ## Status
 
-**M3 — confirmation — shipped:** the deterministic `hline_v1` classifier, LSR spectral axes,
-and the live HI badge — on top of M2's observation records (checklists, session wizard, MCP
-surface), M1's first light (real Airspy, live waterfall, captures to `.npz`/SigMF), and M0's
-full CI/release/install pipeline. **M4 — reports & photos — is in progress.**
+**Feature-complete (M0–M5 all shipped):** capture (synthetic + real Airspy), observation
+records + session wizard + observing ladder, the `hline_v1` classifier with live HI badge and
+LSR axes, PDF reports + photos + Virgo/ezRA exporters, Stellarium cross-check, HackRF RFI
+sweep, gpsd locations, and a 17-tool MCP surface. **`v1.0.0` is not a feature** — it is tagged
+after one real end-to-end observing campaign (plan → observe → confirm → PDF). See
+`CHANGES.md` for the full version history and `plans/roadmap-post-v0.6.md` for what comes
+after.
 
 | Tag | Milestone | Release means | |
 |---|---|---|---|
@@ -42,6 +45,13 @@ full CI/release/install pipeline. **M4 — reports & photos — is in progress.*
 | `v0.5.0` | M4 | Reports & photos: PDF export, Virgo/ezRA exporters | ✅ done |
 | `v0.6.0` | M5 | Feature-complete — the `v1.0.0` release candidate | ✅ done |
 | `v1.0.0` | — | After one real end-to-end observing campaign | ⏭ next |
+| `v0.7.0` | M6 | Station cockpit: status bar, diagnostics MCP, audio, dark mode, archive | 📋 planned |
+| `v0.8.0` | M7 | Calibration captures, scheduler, drift-scan campaigns, sky chart | 📋 planned |
+| `v0.9.0` | M8 | Research bridge: station UUID, export bundle, build-guide PDFs | 📋 planned |
+| `v1.1.0` | M9 | Rotator: Discovery Drive (rotctl TCP / EasyComm II) | 📋 planned |
+
+The post-v0.6 milestones are specified in `plans/roadmap-post-v0.6.md` — they build while
+waiting for first light and none of them move the `v1.0.0` gate.
 
 ## Quickstart (dev)
 

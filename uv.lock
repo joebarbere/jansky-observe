@@ -915,7 +915,7 @@ wheels = [
 
 [[package]]
 name = "jansky"
-version = "0.1.0"
+version = "0.2.0"
 source = { editable = "../jansky" }
 dependencies = [
     { name = "astropy" },
@@ -939,12 +939,12 @@ requires-dist = [
     { name = "astropy", specifier = ">=6.0" },
     { name = "astroquery", specifier = ">=0.4.7" },
     { name = "blimpy", marker = "extra == 'seti'", specifier = ">=2.1" },
-    { name = "galpy", marker = "extra == 'dynamics'", specifier = ">=1.9" },
+    { name = "galpy", marker = "extra == 'dynamics'", specifier = ">=1.12.0" },
     { name = "healpy", marker = "extra == 'cmb'", specifier = ">=1.16" },
     { name = "ipykernel", specifier = ">=6.29" },
     { name = "matplotlib", specifier = ">=3.8" },
     { name = "numpy", specifier = ">=1.26" },
-    { name = "pillow", marker = "extra == 'tui'", specifier = ">=10.0" },
+    { name = "pillow", marker = "extra == 'tui'", specifier = ">=12.3.0" },
     { name = "pint-pulsar", marker = "extra == 'pulsar'", specifier = ">=1.0" },
     { name = "pyrtlsdr", marker = "extra == 'sdr'", specifier = ">=0.3" },
     { name = "pyuvdata", marker = "extra == 'formats'", specifier = ">=3.0" },
@@ -957,7 +957,7 @@ requires-dist = [
     { name = "scipy", specifier = ">=1.11" },
     { name = "sigmf", marker = "extra == 'formats'", specifier = ">=1.2" },
     { name = "spectral-cube", specifier = ">=0.6.5" },
-    { name = "textual", marker = "extra == 'tui'", specifier = ">=0.60" },
+    { name = "textual", marker = "extra == 'tui'", specifier = ">=8.2.8" },
     { name = "textual-image", marker = "extra == 'tui'", specifier = ">=0.7" },
     { name = "tqdm", specifier = ">=4.66" },
     { name = "turbo-seti", marker = "extra == 'seti'", specifier = ">=2.3" },
@@ -967,21 +967,21 @@ provides-extras = ["pulsar", "dynamics", "sdr", "seti", "formats", "hi", "ml", "
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "jupyterlab", specifier = ">=4.2" },
+    { name = "jupyterlab", specifier = ">=4.6.1" },
     { name = "mkdocs-jupyter", specifier = ">=0.24" },
     { name = "mkdocs-material", specifier = ">=9.5" },
-    { name = "mypy", specifier = ">=1.11" },
+    { name = "mypy", specifier = ">=2.2.0" },
     { name = "nbformat", specifier = ">=5.10" },
     { name = "nbmake", specifier = ">=1.5" },
     { name = "pytest", specifier = ">=8.2" },
     { name = "pytest-cov", specifier = ">=5.0" },
-    { name = "ruff", specifier = ">=0.6" },
+    { name = "ruff", specifier = ">=0.15.21" },
     { name = "seaborn", specifier = ">=0.13" },
 ]
 
 [[package]]
 name = "jansky-observe"
-version = "0.6.0"
+version = "0.6.1"
 source = { editable = "." }
 dependencies = [
     { name = "astropy" },
