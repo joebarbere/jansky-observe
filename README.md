@@ -171,6 +171,14 @@ The full project plan — architecture, data model, integrations, milestones —
 - [`jansky-research`](https://github.com/joebarbere/jansky-research) — the research repo; once
   the station produces calibrated spectra, self-collected data feeds its slices.
 
+## Support the station buildout
+
+If this project is useful to you — or just fun to watch — you can help fund the next piece
+of station hardware via [GitHub Sponsors](https://github.com/sponsors/joebarbere) or
+[Ko-fi](https://ko-fi.com/joebarbere). Current wishlist, roughly in order: Pi 5 active
+cooler → storage for IQ recordings → Discovery Drive rotator → a second dish → a KrakenSDR
+for coherent interferometry. (Plan: `plans/funding.md`.)
+
 ## License
 
 MIT — see [LICENSE](LICENSE).
