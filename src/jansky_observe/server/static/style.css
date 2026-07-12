@@ -44,6 +44,37 @@ body {
   font-size: 12px;
 }
 
+/* ---- cockpit status bar (roadmap M6): rides every page ------------------- */
+#cockpit-bar {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+  padding: 0.35rem 0.8rem;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+  color: var(--muted);
+}
+#cockpit-bar b { color: var(--text); font-weight: 600; }
+#cockpit-bar .cb-sep { color: var(--border); }
+#cockpit-bar .cb-item { white-space: nowrap; }
+#cockpit-bar .cb-muted { color: var(--muted); }
+#cockpit-bar .cb-warn { color: var(--warn); }
+#cockpit-bar .cb-bad { color: var(--bad); font-weight: 600; }
+.cb-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 5px;
+  background: var(--muted);
+  vertical-align: middle;
+}
+.cb-dot.cb-ok { background: var(--ok); }
+.cb-dot.cb-warn { background: var(--warn); }
+.cb-dot.cb-bad { background: var(--bad); }
+
 .badge {
   padding: 0.1rem 0.55rem;
   border-radius: 3px;

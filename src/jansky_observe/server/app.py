@@ -46,6 +46,7 @@ from jansky_observe.server.live_badge import LiveBadge
 from jansky_observe.server.routers import catalog, gps, observations, photos, reports, wizard
 from jansky_observe.server.routers.captures import register_stopped_capture
 from jansky_observe.server.routers.captures import router as captures_router
+from jansky_observe.server.status_bar import WeatherCache, build_status_bar
 
 __all__ = ["Broadcaster", "CaptureStartBody", "app", "create_app"]
 
@@ -270,6 +271,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
     application.state.broadcaster = Broadcaster()
     application.state.live_badge = LiveBadge()
     application.state.engine = engine
+    application.state.weather_cache = WeatherCache()
     application.mount("/static", StaticFiles(directory=str(_PACKAGE_DIR / "static")), name="static")
     application.include_router(observations.router)
     # gps before catalog: /catalog/locations/from-gps must beat /catalog/locations/{id}.
@@ -338,6 +340,21 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             register_stopped_capture, application.state.engine, reply
         )
         return _with_disk_conveniences(reply)
+
+    @application.get("/api/status_bar")
+    async def status_bar() -> dict[str, Any]:
+        """The station cockpit's status-bar payload (roadmap M6): server UTC +
+        LST, the active-station chip, the source badge, a ~15-min-cached weather
+        chip, and the disk gauge. Runs off-loop (astropy LST, a control ping,
+        and — on a cache miss — the weather providers)."""
+        return await asyncio.to_thread(
+            build_status_bar,
+            data_dir=settings.data_dir,
+            ctl_endpoint=settings.ctl_endpoint,
+            broadcaster=application.state.broadcaster,
+            engine=application.state.engine,
+            weather_cache=application.state.weather_cache,
+        )
 
     @application.get("/api/diagnostics")
     async def diagnostics() -> dict[str, Any]:

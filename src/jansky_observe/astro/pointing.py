@@ -34,6 +34,7 @@ __all__ = [
     "TransitInfo",
     "beam_crossing_minutes",
     "hpbw_deg",
+    "local_sidereal_time_hours",
     "pointing_now",
     "rise_set_info",
     "target_coord",
@@ -59,6 +60,29 @@ def _to_datetime(t: Time) -> datetime:
     """Convert an astropy Time to a timezone-aware UTC datetime."""
     dt: datetime = t.utc.to_datetime()
     return dt.replace(tzinfo=UTC)
+
+
+def local_sidereal_time_hours(lon_deg: float, when: datetime | None = None) -> float:
+    """Apparent local sidereal time at a longitude, in hours [0, 24).
+
+    LST is the right ascension currently on the meridian — the clock an
+    observer schedules transits by (the status bar, roadmap M6). Uses astropy's
+    apparent sidereal time (nutation included).
+
+    Parameters
+    ----------
+    lon_deg : float
+        East longitude in degrees.
+    when : datetime, optional
+        UTC instant; the current time by default.
+
+    Returns
+    -------
+    float
+        Apparent LST in hours, in ``[0, 24)``.
+    """
+    lst = _to_time(when).sidereal_time("apparent", longitude=lon_deg * u.deg)
+    return float(lst.hour)
 
 
 def target_coord(
