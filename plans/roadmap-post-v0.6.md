@@ -203,4 +203,3 @@ lands first it ships as v0.10.0 and the table shifts.
   `interferometry.py` module — evaluate it first.
 - **hi4pi_xcheck (v2 classifier)** — still arrives via jansky-research plan 78, consumed
   here (plan §6).
-- **Funding** — see `plans/funding.md`.
