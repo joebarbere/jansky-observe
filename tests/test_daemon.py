@@ -97,13 +97,20 @@ def test_main_version() -> None:
     assert __version__ in out.getvalue()
 
 
-def test_main_requires_synthetic() -> None:
+def test_main_requires_a_source() -> None:
     err = io.StringIO()
     with contextlib.redirect_stderr(err), pytest.raises(SystemExit) as excinfo:
         main([])
     assert excinfo.value.code == 2
-    assert "--synthetic" in err.getvalue()
-    assert "M1" in err.getvalue()
+    assert "--source" in err.getvalue()
+
+
+def test_main_airspy_missing_binary_errors_cleanly() -> None:
+    err = io.StringIO()
+    with contextlib.redirect_stderr(err), pytest.raises(SystemExit) as excinfo:
+        main(["--source", "airspy", "--airspy-binary", "/nonexistent/airspy_rx"])
+    assert excinfo.value.code == 2
+    assert "apt package" in err.getvalue()
 
 
 def test_main_synthetic_end_to_end() -> None:

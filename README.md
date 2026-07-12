@@ -35,7 +35,7 @@ waterfall, plus the full pipeline (CI, release workflow with a release-blocking 
 | Tag | Milestone | Release means | |
 |---|---|---|---|
 | `v0.1.0` | M0 | Walking skeleton + the whole CI/release/install pipeline | ✅ done |
-| `v0.2.0` | M1 | First light: real Airspy, live view, captures to disk | ⏭ next |
+| `v0.2.0` | M1 | First light: real Airspy source, capture to `.npz`/SigMF with live disk readout | ⏭ current |
 | `v0.3.0` | M2 | Observation records, checklists, session wizard | |
 | `v0.4.0` | M3 | Confirmation: rule-based classifier + HI4PI cross-check | |
 | `v0.5.0` | M4 | Reports & photos: PDF export, Virgo/ezRA exporters | |
@@ -59,6 +59,21 @@ make run            # API server at http://localhost:8000
 ```
 
 `make help` lists the rest (`test`, `cov`, `lint`, `typecheck`, `qemu-install`, …).
+
+### Recording
+
+Captures come in two formats: **`.npz`** (Welch spectra — compact, the default for watching the
+line) and **SigMF** (raw IQ — **~43 GB/hour at 3 MSPS**, so mind the live disk-usage readout).
+Files land in `data/captures/` in dev and `/var/lib/jansky-observe/captures/` on the Pi. To
+switch the Pi between the synthetic source and the real Airspy (first light!):
+
+```bash
+curl -fsSL https://github.com/joebarbere/jansky-observe/releases/latest/download/install.sh \
+  | sudo bash -s -- --set-source airspy      # or: synthetic
+```
+
+(it edits `/etc/default/jansky-observe` and restarts only the capture daemon; the API
+server and its records stay up).
 
 ## Install on the Pi
 
