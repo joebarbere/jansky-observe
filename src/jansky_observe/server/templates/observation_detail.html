@@ -111,4 +111,47 @@
   <p class="muted">no captures associated yet</p>
   {% endif %}
 </section>
+
+<section class="pane pad">
+  <h2>Photos</h2>
+  <div id="photos" hx-get="/observations/{{ obs.id }}/photos" hx-trigger="load" hx-swap="outerHTML">
+    <p class="muted">loading photos&hellip;</p>
+  </div>
+</section>
+
+<section class="pane pad">
+  <h2>Report</h2>
+  <div class="row">
+    <form method="post" action="/observations/{{ obs.id }}/report">
+      <button class="btn" type="submit">Build PDF report</button>
+    </form>
+    <a href="/observations/{{ obs.id }}/report.pdf">Download report PDF</a>
+    <span class="muted">(404 until a report has been built)</span>
+  </div>
+</section>
+
+<script>
+  /* Drag-drop upload (plan §5.3): document-level delegation so the listeners
+     survive htmx swaps of the #photos fragment. Dropped files land in the
+     zone's file input and the form submits (htmx posts the multipart). */
+  document.addEventListener("dragover", function (e) {
+    var zone = e.target.closest && e.target.closest(".drop-zone");
+    if (zone) { e.preventDefault(); zone.classList.add("drag-over"); }
+  });
+  document.addEventListener("dragleave", function (e) {
+    var zone = e.target.closest && e.target.closest(".drop-zone");
+    if (zone) zone.classList.remove("drag-over");
+  });
+  document.addEventListener("drop", function (e) {
+    var zone = e.target.closest && e.target.closest(".drop-zone");
+    if (!zone) return;
+    e.preventDefault();
+    zone.classList.remove("drag-over");
+    var input = zone.querySelector('input[type="file"]');
+    if (input && e.dataTransfer.files.length) {
+      input.files = e.dataTransfer.files;
+      input.form.requestSubmit();
+    }
+  });
+</script>
 {% endblock %}

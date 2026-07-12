@@ -8,6 +8,7 @@ logic. See the package docstring for what is deliberately absent.
 from __future__ import annotations
 
 import asyncio
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -203,6 +204,33 @@ def build_mcp(app: FastAPI) -> FastMCP:
         return await _post_json(
             app, f"/api/observations/{observation_id}/checklist/{state_id}/tick", {"by": by}
         )
+
+    @mcp.tool
+    async def build_report(observation_id: int) -> dict[str, Any]:
+        """Build (or rebuild) the observation's PDF report — plan §7 contents:
+        highlight photo, metadata, weather, checklist as performed, spectra with
+        v_LSR axes, classifier verdicts, notes, photo grid, capture inventory.
+        Returns the server-side path; the PDF downloads from
+        /observations/{id}/report.pdf."""
+        return await _post_json(app, f"/api/observations/{observation_id}/report", {})
+
+    @mcp.tool
+    async def export_capture(capture_id: int, format: str = "virgo_csv") -> dict[str, Any]:
+        """Export a capture's averaged spectrum for the amateur-HI ecosystem:
+        format="virgo_csv" (Virgo two-column CSV) or "ezra_txt" (ezRA ezCol .txt;
+        needs a linked observation for pointing metadata). One-way convenience —
+        internal formats stay SigMF/.npz (plan §4.7). Returns the export's path."""
+        async with _client(app) as client:
+            response = await client.get(
+                f"/api/captures/{capture_id}/export", params={"format": format}
+            )
+            if response.status_code != 200:
+                detail = response.json().get("detail", response.text)
+                raise ValueError(f"export failed ({response.status_code}): {detail}")
+            disposition = response.headers.get("content-disposition", "")
+        filename = disposition.rsplit('filename="', 1)[-1].rstrip('"')
+        path = str(Path(app.state.settings.data_dir) / "exports" / filename) if filename else None
+        return {"ok": True, "format": format, "path": path}
 
     return mcp
 

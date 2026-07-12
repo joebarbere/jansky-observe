@@ -36,6 +36,8 @@ __all__ = [
     "default_location",
     "default_station",
     "get_or_404",
+    "photos",
+    "reports",
     "source_pointing",
     "weather_or_none",
 ]
@@ -235,3 +237,5 @@ def weather_or_none(lat: float, lon: float, hours: int = 3) -> dict[str, Any] | 
 
 # Exported last: the submodule imports the shared plumbing defined above.
 from jansky_observe.server.routers import captures as captures  # noqa: E402
+from jansky_observe.server.routers import photos as photos  # noqa: E402
+from jansky_observe.server.routers import reports as reports  # noqa: E402

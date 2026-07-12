@@ -35,6 +35,20 @@ siblings (`../jansky`, `../jansky-research`).
   write a markdown analysis note whose claims cite `ClassifierResult` rows — no unsupported
   detection language (plan §12.5). Notes that v1 verdicts are threshold evidence only until
   `hi4pi_xcheck` lands via jansky-research plan 78.
+- `write-up` — draft the report narrative in house honesty standards: gather the observation
+  + classifier results (running `hline_v1` first on anything unclassified), write the plan-§7
+  sections (attempted / conditions / recorded / classifier found / interpretation — clearly
+  labeled / next steps), `append_note` the draft so the report renders it, then
+  `build_report` for the PDF at `data/observations/<id>/report.pdf`. Hard rules: claims cite
+  `ClassifierResult` rows, and a `detected` peak at an implausible galactic v_LSR is written
+  up as probable RFI (the 1421.25 MHz bare-input spur precedent).
+- `compare-observations` — cross-session, same source over days/weeks: pull `axis=vlsr`
+  spectra + classifier results per done observation, then four checks — stacking (≈ √N
+  gain), SNR vs integration time (√t law; deviations implicate gain drift/RFI),
+  peak-v_LSR stability (secular drift = frequency-calibration alarm; the LSR axis should have
+  removed the ±30 km/s annual term), pointing repeatability (growing dialed-vs-computed
+  offsets → redo Sun cal). Output: a markdown comparison table + findings, appended to the
+  newest observation.
 
 ## Agents (`agents/`)
 
@@ -57,10 +71,8 @@ mirror it in the others. The skills above are station-specific and stay here.
 
 ## Roadmap (plan §12.6)
 
-More assets ship with their milestones — the loop exists before the features do. M2's
-deliverables (the MCP surface — Claude as a console peer of the browser UI — plus
-`/plan-session`, `/troubleshoot-chain`, `/new-migration`) and M3's (`/observing-copilot`,
-`/analyze-observation`, and the `hi-data-analyst` + `dsp-reviewer` agents) have shipped;
-remaining:
-
-- **M4** — `/write-up`, `/compare-observations`.
+Assets ship with their milestones — the loop exists before the features do. With M4's
+`/write-up` and `/compare-observations`, **every asset in plan §12.6 has shipped**: M0's
+developer loop, M2's MCP surface + observer skills, M3's analyst skills and agents, M4's
+report/comparison skills. M5 (polish) has no Claude deliverables — changes here from now on
+are maintenance, mirrored to the siblings where shared.

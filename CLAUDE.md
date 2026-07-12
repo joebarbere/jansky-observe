@@ -62,6 +62,10 @@ If a change seems to require enabling the internal bias tee, it's wrong — stop
     (baseline fit → peak search in the LSR Doppler window → SNR verdict 5/2 thresholds);
     v2 `hi4pi_xcheck` is deferred to jansky-research plan 78 (harness built once there)
   - `weather/` — `WeatherProvider` protocol: NWS primary, Open-Meteo fallback
+  - `export/` — one-way exporters for the amateur-HI ecosystem (plan §4.7): Virgo-style CSV
+    and ezRA `.txt` from a capture's averaged spectrum; internal formats stay SigMF + `.npz`
+  - `photos.py` — photo ingest/resize + the highlight-photo rules (one highlight per
+    observation; it leads the PDF report)
   - `frames.py` — spectral-frame wire formats shared by daemon and server (ZMQ + WebSocket)
   - `control.py` — the ZMQ REP control channel (capture start/stop, daemon ↔ server)
   - `synthetic.py` — synthetic noise + fake-HI generators (M0 skeleton, test fixtures)
@@ -94,12 +98,14 @@ nothing by design.
 
 ## Current status
 
-M0–M2 have shipped — `v0.3.0` (observation records, checklists, session wizard, the MCP
-surface at `/mcp`). **M3 (confirmation) is in progress on `m3/confirmation`:** the v1
-rule-based classifier (`confirm/`, classifier name `hline_v1`), LSR spectral axes
-(`astro/lsr.py`), the live HI badge (running SNR on the server's accumulating average),
-classify/spectrum endpoints, and three new MCP tools (`run_classifier`, `get_spectrum`,
-`get_capture_meta`). The HI4PI cross-check (`hi4pi_xcheck`, v2) is **deferred to
+M0–M3 have shipped — `v0.4.0` (confirmation: the `hline_v1` classifier, LSR spectral axes,
+the live HI badge, classify/spectrum endpoints and their MCP tools). **M4 (reports & photos)
+is in progress on `m4/reports-photos`:** photo ingest/resize with a highlight photo per
+observation (`photos.py`), the WeasyPrint PDF report (`POST /api/observations/{id}/report`
+→ `data/observations/<id>/report.pdf`, contents per plan §7), Virgo-CSV + ezRA-txt exporters
+(`export/`, `GET /api/captures/{id}/export?format=...` — one-way conveniences, plan §4.7),
+and two new MCP tools (`export_capture`, `build_report`). M5 (polish, the `v1.0.0`
+candidate) is next. The HI4PI cross-check (`hi4pi_xcheck`, v2) remains **deferred to
 jansky-research plan 78** per plan §6 — the comparison harness is built once there and
 consumed here. The full plan lives in `plans/jansky_observe.md` — read it before any
 feature work.
@@ -123,6 +129,14 @@ feature work.
 - `/analyze-observation` — post-session: run `hline_v1` over every `.npz` capture, fetch
   v_LSR spectra, interpret (baseline, SNR, velocity plausibility, RFI), write an analysis
   note whose claims cite `ClassifierResult` rows (provenance rule, plan §12.5).
+- `/write-up` — draft the report narrative (plan §7 sections: attempted / conditions /
+  recorded / classifier found / interpretation / next steps) in house honesty standards,
+  append it to the observation notes, then `build_report` for the PDF. No unsupported
+  detection language; an implausible-velocity `detected` is written up as probable RFI.
+- `/compare-observations` — cross-session, same source: stacking, SNR vs integration time
+  (√t law), peak-v_LSR stability (secular drift = frequency-cal alarm), pointing
+  repeatability (growing offsets → redo Sun cal); comparison table appended to the newest
+  observation.
 - `hi-data-analyst` (agent) — the analyst persona: station numbers, 21 cm physics, the v1
   classifier's exact semantics, and the wrong-spectrum suspect order (RFI → baseline ripple →
   frequency cal → pointing) baked in.
@@ -130,4 +144,4 @@ feature work.
   `confirm/`: plan-number checks plus the classic unit bugs (topocentric vs LSR, Hz vs km/s,
   10 vs 20·log10, fftshift, int16 scaling, Welch normalization, Doppler conventions).
 
-More arrive with the milestones per plan §12.6: `/write-up`, `/compare-observations` at M4.
+With M4's `/write-up` and `/compare-observations`, every asset in plan §12.6 has shipped.

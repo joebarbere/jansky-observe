@@ -28,18 +28,18 @@ flowchart LR
 
 ## Status
 
-**M2 — observation records — shipped:** observations, checklists, and the session wizard on a
-forward-migrating SQLite schema, astropy pointing + weather, and the read-mostly MCP surface —
-on top of M1's first light (real Airspy, live waterfall, captures to `.npz`/SigMF) and M0's
-full CI/release/install pipeline. **M3 — confirmation — is in progress.**
+**M3 — confirmation — shipped:** the deterministic `hline_v1` classifier, LSR spectral axes,
+and the live HI badge — on top of M2's observation records (checklists, session wizard, MCP
+surface), M1's first light (real Airspy, live waterfall, captures to `.npz`/SigMF), and M0's
+full CI/release/install pipeline. **M4 — reports & photos — is in progress.**
 
 | Tag | Milestone | Release means | |
 |---|---|---|---|
 | `v0.1.0` | M0 | Walking skeleton + the whole CI/release/install pipeline | ✅ done |
 | `v0.2.0` | M1 | First light: real Airspy source, capture to `.npz`/SigMF with live disk readout | ✅ done |
 | `v0.3.0` | M2 | Observation records, checklists, session wizard | ✅ done |
-| `v0.4.0` | M3 | Confirmation: v1 classifier; HI4PI cross-check follows via `jansky-research` | ⏭ current |
-| `v0.5.0` | M4 | Reports & photos: PDF export, Virgo/ezRA exporters | |
+| `v0.4.0` | M3 | Confirmation: v1 classifier; HI4PI cross-check follows via `jansky-research` | ✅ done |
+| `v0.5.0` | M4 | Reports & photos: PDF export, Virgo/ezRA exporters | ⏭ current |
 | `v0.6.0` | M5 | Feature-complete — the `v1.0.0` release candidate | |
 | `v1.0.0` | — | After one real end-to-end observing campaign | |
 
@@ -106,6 +106,16 @@ Verdicts are stored as `ClassifierResult` rows (classifier name + version) with 
 every spectrum is served on either axis (`?axis=mhz|vlsr`). `/analyze-observation` turns the
 results into an honest analysis note — verdicts come from code, Claude interprets. The HI4PI
 sky cross-check (v2) follows via `jansky-research`.
+
+### Reports & export
+
+Sessions end as documents, not just files. Attach photos to an observation (drag-drop,
+resized on ingest) and pick one as the **highlight**; then one click — or `/write-up` via
+Claude — builds the **PDF report**: header and highlight photo, metadata, weather, the
+checklist as performed, the v_LSR profile and waterfall, classifier verdicts, notes, and the
+capture inventory. For the amateur-HI ecosystem, any capture's averaged spectrum exports as
+**Virgo-style CSV** or **ezRA `.txt`** (`GET /api/captures/{id}/export?format=...`) — one-way
+conveniences; SigMF and `.npz` stay the internal formats.
 
 ## Install on the Pi
 

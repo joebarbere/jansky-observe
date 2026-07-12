@@ -1,0 +1,270 @@
+{# The PDF report template (plan §7) — rendered by export/pdf.py with plain
+   Jinja2 and printed by WeasyPrint. Print CSS lives inline: this page is
+   never served to a browser. #}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>{{ obs.name }} — observation report</title>
+  <style>
+    @page {
+      size: A4;
+      margin: 18mm 15mm 20mm 15mm;
+      @top-center {
+        content: string(obs-name);
+        font-size: 8pt;
+        color: #888;
+      }
+      @bottom-right {
+        content: counter(page) " / " counter(pages);
+        font-size: 8pt;
+        color: #888;
+      }
+      @bottom-left {
+        content: "jansky-observe {{ version }}";
+        font-size: 8pt;
+        color: #888;
+      }
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font: 10pt/1.45 "DejaVu Sans", sans-serif;
+      color: #1a2230;
+    }
+    h1 {
+      string-set: obs-name content();
+      font-size: 18pt;
+      margin-bottom: 2mm;
+    }
+    h2 {
+      font-size: 12pt;
+      margin-bottom: 2mm;
+      padding-bottom: 1mm;
+      border-bottom: 1px solid #c6cdd8;
+    }
+    .subhead { color: #5a6577; margin-bottom: 6mm; }
+    section { margin-bottom: 7mm; }
+    .keep-together { break-inside: avoid; }
+    .figure-block { break-inside: avoid; margin-bottom: 4mm; }
+
+    table.kv { border-collapse: collapse; width: 100%; }
+    table.kv th {
+      text-align: left; vertical-align: top; white-space: nowrap;
+      color: #5a6577; font-weight: normal; padding: 0.8mm 5mm 0.8mm 0; width: 38mm;
+    }
+    table.kv td { padding: 0.8mm 0; }
+
+    table.list { border-collapse: collapse; width: 100%; font-size: 9pt; }
+    table.list th, table.list td {
+      text-align: left; padding: 1.2mm 2.5mm; border-bottom: 1px solid #dde2ea;
+      vertical-align: top;
+    }
+    table.list th { color: #5a6577; font-weight: normal; }
+
+    .badge {
+      display: inline-block; padding: 0 2mm; border-radius: 1mm;
+      font-size: 8pt; color: #fff; background: #7a8699;
+    }
+    .badge.done, .badge.detected { background: #37b26c; }
+    .badge.running, .badge.uncertain { background: #e0a83a; }
+    .badge.aborted, .badge.not_detected { background: #d05555; }
+    .badge.planned { background: #7a8699; }
+    .muted { color: #7a8699; }
+    .mono { font-family: "DejaVu Sans Mono", monospace; font-size: 8pt; }
+
+    img.highlight { width: 100%; margin-bottom: 1mm; }
+    img.report-figure { width: 100%; }
+    .photo-grid .photo {
+      display: inline-block; vertical-align: top; width: 31%;
+      margin: 0 1% 3mm 0;
+    }
+    .photo-grid img { width: 100%; }
+    .caption { font-size: 8pt; color: #5a6577; }
+
+    ul.checklist { list-style: none; }
+    ul.checklist li { padding: 0.6mm 0; }
+    .tick { font-weight: bold; }
+    .tick.ok { color: #37b26c; }
+    .tick.no { color: #d05555; }
+
+    .notes { white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+
+<h1>{{ obs.name }}</h1>
+<p class="subhead">
+  {{ obs.actual_start | dt }} · {{ station.name if station else "—" }} ·
+  <span class="badge {{ obs.status }}">{{ obs.status }}</span> ·
+  observers: {% for o in observers %}{{ o.name }}{% if not loop.last %}, {% endif %}{% else %}—{% endfor %}
+</p>
+
+{% if highlight %}
+<section class="keep-together">
+  <img class="highlight" src="{{ highlight.uri }}" alt="highlight photo">
+  {% if highlight.caption %}<p class="caption">{{ highlight.caption }}</p>{% endif %}
+</section>
+{% endif %}
+
+<section class="keep-together">
+  <h2>Metadata</h2>
+  <table class="kv">
+    <tr><th>type</th><td>{{ obs_type.name if obs_type else "—" }}</td></tr>
+    {% if source %}
+    <tr><th>source</th><td>{{ source.name }} ({{ source.kind }})</td></tr>
+    <tr><th>coordinates</th><td>
+      {%- if source.gal_l_deg is not none and source.gal_b_deg is not none -%}
+        l/b {{ "%.2f"|format(source.gal_l_deg) }}° / {{ "%.2f"|format(source.gal_b_deg) }}°
+      {%- elif source.ra_deg is not none and source.dec_deg is not none -%}
+        RA/Dec {{ "%.4f"|format(source.ra_deg) }}° / {{ "%.4f"|format(source.dec_deg) }}°
+      {%- else -%}ephemeris (computed live){%- endif -%}
+    </td></tr>
+    {% endif %}
+    <tr><th>dialed az / el</th><td>{% if obs.pointing_az_deg is not none %}{{ "%.1f"|format(obs.pointing_az_deg) }}° / {{ "%.1f"|format(obs.pointing_el_deg) }}°{% else %}—{% endif %}</td></tr>
+    <tr><th>computed az / el at start</th><td>{% if obs.computed_az_deg is not none %}{{ "%.1f"|format(obs.computed_az_deg) }}° / {{ "%.1f"|format(obs.computed_el_deg) }}°{% else %}—{% endif %}</td></tr>
+    <tr><th>planned</th><td>{{ obs.planned_start | dt }} → {{ obs.planned_end | dt }}</td></tr>
+    <tr><th>actual</th><td>{{ obs.actual_start | dt }} → {{ obs.actual_end | dt }}</td></tr>
+    {% if location %}
+    <tr><th>location</th><td>{{ location.name }} ({{ "%.4f"|format(location.lat_deg) }}°, {{ "%.4f"|format(location.lon_deg) }}°, {{ "%.0f"|format(location.elevation_m) }} m)</td></tr>
+    {% endif %}
+    {% if obs_type and obs_type.default_sdr_settings %}
+    <tr><th>default SDR settings</th><td class="mono">{{ obs_type.default_sdr_settings }}</td></tr>
+    {% endif %}
+  </table>
+</section>
+
+<section class="keep-together">
+  <h2>Weather at start</h2>
+  {% if weather %}
+  {% set now = weather.get("now") or {} %}
+  <table class="kv">
+    <tr><th>provider</th><td>{{ weather.get("provider", "—") }}</td></tr>
+    <tr><th>temp</th><td>{{ now.get("temp_c") if now.get("temp_c") is not none else "—" }} °C</td></tr>
+    <tr><th>wind</th><td>{{ now.get("wind_speed_ms") if now.get("wind_speed_ms") is not none else "—" }} m/s</td></tr>
+    <tr><th>sky cover</th><td>{{ now.get("sky_cover_pct") if now.get("sky_cover_pct") is not none else "—" }} %</td></tr>
+    <tr><th>humidity</th><td>{{ now.get("humidity_pct") if now.get("humidity_pct") is not none else "—" }} %</td></tr>
+    <tr><th>summary</th><td>{{ now.get("summary") or "—" }}</td></tr>
+  </table>
+  {% else %}
+  <p class="muted">weather unavailable</p>
+  {% endif %}
+</section>
+
+<section>
+  <h2>Checklist as performed</h2>
+  {% if checklist %}
+  <ul class="checklist">
+    {% for state, item in checklist %}
+    <li>
+      {% if state.checked %}<span class="tick ok">✓</span>{% else %}<span class="tick no">✗</span>{% endif %}
+      {{ item.text }}
+      {% if not item.required %}<span class="muted">(recommended)</span>{% endif %}
+      {% if state.checked %}
+      <span class="muted">— {{ state.checked_by or "?" }}, {{ state.checked_at | dt }}</span>
+      {% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="muted">this observation type has no checklist</p>
+  {% endif %}
+</section>
+
+{% for entry in captures %}
+{% if entry.profile_uri or entry.waterfall_uri %}
+<section>
+  <h2>Capture {{ entry.capture.id }} — {{ entry.filename }}</h2>
+  {% if entry.profile_uri %}
+  <div class="figure-block">
+    <img class="report-figure" src="{{ entry.profile_uri }}" alt="integrated profile">
+    <p class="caption">Integrated (linear-averaged) spectrum{% if source and location %} — dual topocentric-MHz / v_LSR axes (plan §4.6){% endif %}.</p>
+  </div>
+  {% endif %}
+  {% if entry.waterfall_uri %}
+  <div class="figure-block">
+    <img class="report-figure" src="{{ entry.waterfall_uri }}" alt="waterfall">
+    <p class="caption">Waterfall — power (dB), time increasing downward.</p>
+  </div>
+  {% endif %}
+</section>
+{% endif %}
+{% endfor %}
+
+<section class="keep-together">
+  <h2>Classifier verdicts</h2>
+  {% set ns = namespace(any_results=false) %}
+  {% for entry in captures %}{% if entry.results %}{% set ns.any_results = true %}{% endif %}{% endfor %}
+  {% if ns.any_results %}
+  <table class="list">
+    <tr><th>capture</th><th>classifier</th><th>verdict</th><th>SNR</th><th>peak (MHz)</th><th>window</th><th>mode</th><th>when</th></tr>
+    {% for entry in captures %}{% for r in entry.results %}
+    <tr>
+      <td>{{ entry.capture.id }}</td>
+      <td>{{ r.name }} v{{ r.version }}</td>
+      <td><span class="badge {{ r.verdict }}">{{ r.verdict.replace("_", " ") }}</span></td>
+      <td>{{ "%.1f"|format(r.score) }}</td>
+      <td>{% if r.params.get("peak_freq_hz") %}{{ "%.4f"|format(r.params["peak_freq_hz"] / 1e6) }}{% else %}—{% endif %}</td>
+      <td>{{ r.params.get("window_source", "—") }}</td>
+      <td>{{ r.mode }}</td>
+      <td>{{ r.created_at | dt }}</td>
+    </tr>
+    {% endfor %}{% endfor %}
+  </table>
+  {% else %}
+  <p class="muted">no classifier runs recorded</p>
+  {% endif %}
+</section>
+
+<section>
+  <h2>Notes</h2>
+  {% if obs.notes %}
+  <div class="notes">{{ obs.notes }}</div>
+  {% else %}
+  <p class="muted">no notes recorded</p>
+  {% endif %}
+</section>
+
+{% if photos %}
+<section>
+  <h2>Photos</h2>
+  <div class="photo-grid">
+    {% for photo in photos %}
+    <div class="photo">
+      <img src="{{ photo.uri }}" alt="photo">
+      {% if photo.caption %}<p class="caption">{{ photo.caption }}</p>{% endif %}
+    </div>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
+<section class="keep-together">
+  <h2>Capture inventory</h2>
+  {% if captures %}
+  <table class="list">
+    <tr><th>id</th><th>device</th><th>format</th><th>file</th><th>size</th><th>start</th><th>end</th></tr>
+    {% for entry in captures %}
+    <tr>
+      <td>{{ entry.capture.id }}</td>
+      <td>{{ entry.capture.device }}</td>
+      <td>{{ entry.capture.format }}</td>
+      <td class="mono">{{ entry.filename }}</td>
+      <td>{{ entry.size }}</td>
+      <td>{{ entry.capture.start | dt }}</td>
+      <td>{{ entry.capture.end | dt }}</td>
+    </tr>
+    <tr><td></td><td colspan="6" class="mono muted">{{ entry.settings_json }}</td></tr>
+    {% endfor %}
+  </table>
+  {% else %}
+  <p class="muted">no captures associated</p>
+  {% endif %}
+</section>
+
+<p class="muted" style="font-size: 8pt;">
+  Generated {{ generated_at | dt }} by jansky-observe {{ version }}. Verdicts are deterministic
+  classifier output (ClassifierResult rows); narrative claims live in the notes (plan §12.5).
+</p>
+
+</body>
+</html>

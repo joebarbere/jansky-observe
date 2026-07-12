@@ -1,0 +1,44 @@
+<div id="photos">
+  {% if photos %}
+  <div class="photo-grid">
+    {% for p in photos | sort(attribute="is_highlight", reverse=true) %}
+    <figure class="photo-card{% if p.is_highlight %} highlight{% endif %}">
+      <a href="/photos/{{ p.id }}/image" target="_blank">
+        <img src="/photos/{{ p.id }}/image" alt="{{ p.caption or 'photo ' ~ p.id }}" loading="lazy">
+      </a>
+      {% if p.is_highlight %}<span class="badge photo-highlight">highlight</span>{% endif %}
+      <figcaption>
+        <form class="photo-caption row" hx-post="/observations/{{ obs.id }}/photos/{{ p.id }}/caption"
+              hx-target="#photos" hx-swap="outerHTML">
+          <input type="text" name="caption" value="{{ p.caption }}" placeholder="caption&hellip;">
+          <button class="btn btn-small" type="submit">Save</button>
+        </form>
+        <div class="row photo-actions">
+          <span class="muted">taken {{ p.taken_at | dt }}</span>
+          {% if not p.is_highlight %}
+          <button class="btn btn-small" hx-post="/observations/{{ obs.id }}/photos/{{ p.id }}/highlight"
+                  hx-target="#photos" hx-swap="outerHTML">Make highlight</button>
+          {% endif %}
+          <button class="btn btn-small btn-stop" hx-post="/observations/{{ obs.id }}/photos/{{ p.id }}/delete"
+                  hx-target="#photos" hx-swap="outerHTML" hx-confirm="Delete this photo? The file is removed too.">Delete</button>
+        </div>
+      </figcaption>
+    </figure>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="muted">no photos yet — the first upload becomes the highlight</p>
+  {% endif %}
+
+  <form class="photo-upload" hx-post="/observations/{{ obs.id }}/photos"
+        hx-encoding="multipart/form-data" hx-target="#photos" hx-swap="outerHTML">
+    <div class="drop-zone">
+      <p class="muted">drag &amp; drop photos here, or pick files:</p>
+      <input type="file" name="files" multiple accept="image/*">
+    </div>
+    <div class="row">
+      <input type="text" name="caption" placeholder="caption for this batch (optional)">
+      <button class="btn" type="submit">Upload</button>
+    </div>
+  </form>
+</div>
