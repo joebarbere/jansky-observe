@@ -271,6 +271,43 @@ def test_migration_6_7_upgrade_from_version_5_keeps_data(tmp_path: Path) -> None
     assert _user_version(engine) == max(version for version, _ in db.MIGRATIONS)
 
 
+def test_migration_8_fresh_db_has_campaign(tmp_path: Path) -> None:
+    engine = db.init_db(tmp_path / "data")
+    assert _user_version(engine) == max(version for version, _ in db.MIGRATIONS)
+    assert "campaign" in inspect(engine).get_table_names()
+    caps = {c["name"] for c in inspect(engine).get_columns("capture")}
+    assert {"campaign_id", "sidereal_day"} <= caps
+
+
+def test_migration_8_upgrade_from_version_7_keeps_data(tmp_path: Path) -> None:
+    from jansky_observe.models import Capture
+
+    # Only the FK-free ``sidereal_day`` column is dropped (``campaign_id`` is a
+    # foreign key — SQLite won't DROP it); migration 8's table + FK column are
+    # guarded/idempotent (fresh-DB test + the re-run below cover them).
+    engine = db.get_engine(tmp_path / "data")
+    with engine.begin() as conn:
+        for version, apply in db.MIGRATIONS[:7]:  # migrations 1..7
+            apply(conn)
+            conn.exec_driver_sql(f"PRAGMA user_version = {version}")
+        conn.exec_driver_sql("ALTER TABLE capture DROP COLUMN sidereal_day")
+        conn.exec_driver_sql(
+            "INSERT INTO capture (device, path, format, size_bytes, kind, created_at) "
+            "VALUES ('airspy', '/x/old.npz', 'npz_spectra', 5, 'science', '2026-07-01T00:00:00')"
+        )
+    assert _user_version(engine) == 7
+    assert "sidereal_day" not in {c["name"] for c in inspect(engine).get_columns("capture")}
+
+    db.migrate(engine)
+    assert _user_version(engine) == max(version for version, _ in db.MIGRATIONS)
+    assert "campaign" in inspect(engine).get_table_names()
+    with db.session(engine) as s:
+        old = s.exec(select(Capture).where(Capture.path == "/x/old.npz")).one()
+        assert old.sidereal_day is None and old.campaign_id is None  # untagged
+    db.migrate(engine)  # re-run is a no-op
+    assert _user_version(engine) == max(version for version, _ in db.MIGRATIONS)
+
+
 def test_migration_5_seeds_the_type_into_a_version_4_db(tmp_path: Path) -> None:
     from jansky_observe.models import ChecklistTemplateItem, ObservationType
 

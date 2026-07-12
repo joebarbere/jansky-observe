@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}{{ campaign.name }} — jansky-observe{% endblock %}
+{% block content %}
+<h1>{{ campaign.name }}
+  <span class="badge {{ 'running' if campaign.status == 'active' else 'done' }}">{{ campaign.status }}</span>
+</h1>
+<div class="row actions">
+  {% if campaign.status == "active" %}
+  <form method="post" action="/campaigns/{{ campaign.id }}/status"><input type="hidden" name="status" value="done"><button class="btn btn-small" type="submit">Close campaign</button></form>
+  {% else %}
+  <form method="post" action="/campaigns/{{ campaign.id }}/status"><input type="hidden" name="status" value="active"><button class="btn btn-small" type="submit">Reopen</button></form>
+  {% endif %}
+</div>
+
+<section class="pane pad">
+  <table class="list">
+    <tr><th>source</th><td>{{ summary.source or "?" }}</td></tr>
+    <tr><th>fixed az / el</th><td>{% if campaign.fixed_az_deg is not none %}{{ "%.1f"|format(campaign.fixed_az_deg) }}° / {{ "%.1f"|format(campaign.fixed_el_deg) }}°{% else %}— (record the mast reading)</td>{% endif %}</td></tr>
+    <tr><th>passes / captures</th><td>{{ summary.n_passes }} / {{ summary.n_captures }}</td></tr>
+    {% if campaign.notes %}<tr><th>notes</th><td>{{ campaign.notes }}</td></tr>{% endif %}
+  </table>
+</section>
+
+<section class="pane pad">
+  <h2>Passes</h2>
+  <p class="muted">One row of captures per sidereal day. Captures at the same <b>LST</b> across
+    passes look at the same patch of sky — that's what stacks.</p>
+  {% if passes %}
+  {% for p in passes %}
+  <h3>Sidereal day {{ p.sidereal_day }}</h3>
+  <table class="list">
+    <tr><th>capture</th><th>start</th><th>LST</th><th>kind</th></tr>
+    {% for c in p.captures %}
+    <tr>
+      <td><a href="/api/captures/{{ c.id }}">#{{ c.id }}</a></td>
+      <td>{{ c.start | dt }}</td>
+      <td>{% if c.lst_hours is not none %}{{ "%.2f"|format(c.lst_hours) }} h{% else %}—{% endif %}</td>
+      <td>{{ c.kind }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% endfor %}
+  {% else %}
+  <p class="muted">No captures tagged yet. While this campaign is active, stopped captures are
+    tagged into it automatically; or attach one via <code>POST /captures/&lt;id&gt;/campaign</code>.</p>
+  {% endif %}
+</section>
+{% endblock %}

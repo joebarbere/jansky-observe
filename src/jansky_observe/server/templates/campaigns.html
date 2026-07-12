@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}campaigns — jansky-observe{% endblock %}
+{% block content %}
+<h1>Drift-scan campaigns</h1>
+<p class="muted">
+  Fixed-pointing continuous capture over many nights. Point the dish at a fixed az/el and let
+  the sky drift through the beam; captures taken while a campaign is <b>active</b> are tagged
+  with a sidereal-day number so passes at the same LST stack across nights.
+</p>
+
+<section class="pane pad">
+  <h2>New campaign</h2>
+  <form method="post" action="/campaigns" class="row">
+    <input type="text" name="name" placeholder="name" required>
+    <select name="source_id" required>
+      {% for s in sources %}<option value="{{ s.id }}">{{ s.name }}</option>{% endfor %}
+    </select>
+    <input type="number" step="any" name="fixed_az_deg" placeholder="fixed az°">
+    <input type="number" step="any" name="fixed_el_deg" placeholder="fixed el°">
+    <input type="text" name="notes" placeholder="notes" size="20">
+    <button class="btn" type="submit">Create (active)</button>
+  </form>
+</section>
+
+{% if rows %}
+<table class="list">
+  <tr><th>name</th><th>source</th><th>status</th><th>fixed az/el</th><th>passes</th><th>captures</th></tr>
+  {% for r in rows %}
+  <tr>
+    <td><a href="/campaigns/{{ r.campaign.id }}">{{ r.campaign.name }}</a></td>
+    <td>{{ r.summary.source or "?" }}</td>
+    <td><span class="badge {{ 'running' if r.campaign.status == 'active' else 'done' }}">{{ r.campaign.status }}</span></td>
+    <td>{% if r.campaign.fixed_az_deg is not none %}{{ "%.1f"|format(r.campaign.fixed_az_deg) }}° / {{ "%.1f"|format(r.campaign.fixed_el_deg) }}°{% else %}—{% endif %}</td>
+    <td>{{ r.summary.n_passes }}</td>
+    <td>{{ r.summary.n_captures }}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% else %}
+<p class="muted">No campaigns yet — create one above.</p>
+{% endif %}
+{% endblock %}
