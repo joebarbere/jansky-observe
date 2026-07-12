@@ -298,6 +298,8 @@ install_wheel() {
 
 install_udev_rules() {
     log "writing ${UDEV_RULES_FILE}"
+    # /etc/udev/rules.d may not exist where udev isn't installed (pristine container).
+    install -d "$(dirname "${UDEV_RULES_FILE}")"
     print_udev > "${UDEV_RULES_FILE}"
     # Reload only when the udev daemon is actually running (not in a container).
     if have udevadm && [[ -d /run/udev ]]; then
