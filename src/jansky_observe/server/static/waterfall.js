@@ -115,6 +115,15 @@
   let lastFrameAt = 0;
   let frameCount = 0;
   let fps = 0;
+  // Smooth-scroll interpolation (roadmap M6): between the ~4 fps frames, the
+  // waterfall is redrawn each animation frame shifted a fraction of a row so it
+  // glides instead of stepping. frameIntervalMs is the observed inter-frame gap
+  // (EMA). Disabled for prefers-reduced-motion.
+  let frameIntervalMs = 250;
+  let rafPending = false;
+  const SMOOTH_SCROLL = !(
+    window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches
+  );
   // Offscreen waterfall history: width = n_fft, height = HISTORY_ROWS.
   const off = { canvas: null, ctx: null, nfft: 0, rows: 0 };
   // Accumulating average: Float64 sum over frames, keyed by stream params.
@@ -213,6 +222,13 @@
     if (off.rows < HISTORY_ROWS) off.rows++;
   }
 
+  function scrollOffset(h) {
+    // 0 just after a frame → up to one visible row-height as the next frame nears.
+    if (!SMOOTH_SCROLL || frameIntervalMs <= 0) return 0;
+    const frac = Math.min(1, (Date.now() - lastFrameAt) / frameIntervalMs);
+    return frac * (h / HISTORY_ROWS);
+  }
+
   function drawWaterfall() {
     const w = wfCanvas.width;
     const h = wfCanvas.height;
@@ -220,7 +236,25 @@
     wfCtx.fillRect(0, 0, w, h);
     if (!off.canvas || off.rows === 0) return;
     wfCtx.imageSmoothingEnabled = false;
-    wfCtx.drawImage(off.canvas, 0, 0, off.nfft, HISTORY_ROWS, 0, 0, w, h);
+    // Shift the whole history down by the sub-frame fraction; the thin gap at
+    // the top is where the next row will land.
+    wfCtx.drawImage(off.canvas, 0, 0, off.nfft, HISTORY_ROWS, 0, scrollOffset(h), w, h);
+  }
+
+  // Redraw the waterfall each animation frame while data is live, so the
+  // sub-frame scroll is smooth. Idle (stale) → stop until the next frame.
+  function animateWaterfall() {
+    rafPending = false;
+    if (!SMOOTH_SCROLL) return;
+    if (Date.now() - lastFrameAt >= STALE_MS) return;
+    drawWaterfall();
+    scheduleWaterfallAnim();
+  }
+
+  function scheduleWaterfallAnim() {
+    if (rafPending || !SMOOTH_SCROLL) return;
+    rafPending = true;
+    requestAnimationFrame(animateWaterfall);
   }
 
   // ---- spectrum ------------------------------------------------------------
@@ -350,8 +384,14 @@
       console.warn("bad frame:", err);
       return;
     }
+    const nowMs = Date.now();
+    if (lastFrameAt > 0) {
+      // EMA of the observed inter-frame gap, clamped to a sane range.
+      const gap = Math.min(2000, Math.max(50, nowMs - lastFrameAt));
+      frameIntervalMs += (gap - frameIntervalMs) * 0.3;
+    }
     latest = frame;
-    lastFrameAt = Date.now();
+    lastFrameAt = nowMs;
     frameCount++;
     updateRange(frame.power);
     accumulate(frame.header, frame.power);
@@ -361,6 +401,7 @@
     showOverlay(false);
     drawSpectrum();
     drawWaterfall();
+    scheduleWaterfallAnim();
     if (window.SpectrumAudio) window.SpectrumAudio.pushFrame(frame.header, frame.power);
   }
 

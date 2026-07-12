@@ -129,6 +129,13 @@ def test_spectrum_audio_wired_into_live_view() -> None:
         assert f'value="{option}"' in body
 
 
+def test_waterfall_has_smooth_scroll() -> None:
+    client = TestClient(create_app(Settings(zmq_endpoint=DEAD_ENDPOINT)))
+    wf = client.get("/static/waterfall.js").text
+    assert "scheduleWaterfallAnim" in wf  # the rAF interpolation loop
+    assert "prefers-reduced-motion" in wf  # honored (disables the animation)
+
+
 def test_audio_js_served_with_modes_and_frame_tap() -> None:
     client = TestClient(create_app(Settings(zmq_endpoint=DEAD_ENDPOINT)))
     audio = client.get("/static/audio.js")

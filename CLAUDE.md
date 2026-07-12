@@ -144,8 +144,15 @@ so far:
   receiver (pink-noise filter bank shaped by the band), doppler (peak→pitch, SNR→loudness),
   geiger (click rate ∝ SNR), drone (harmonic pad by band power). Aesthetic only — the
   waterfall stays the quantitative view; guarded on AudioContext.
+- **FPS knob**: the capture daemon's `--fps` (default 4.0) is now an operator knob —
+  `JANSKY_OBSERVE_FPS` in `/etc/default/jansky-observe`, passed via the capture unit
+  (`--fps ${JANSKY_OBSERVE_FPS}`, mirroring `--source`; both the embedded copy in
+  `install.sh` and `deploy/systemd/` updated, drift check green). Rationale recorded in the
+  env file: each row is an integrated spectrum, so 4 fps is a spectrometer cadence, not a
+  render limit. `waterfall.js` adds sub-frame **smooth-scroll interpolation** (rAF loop, EMA
+  of the observed frame gap; honors `prefers-reduced-motion`).
 
-Still to come in M6: FPS knob, RFI-survey template.
+Still to come in M6: RFI-survey template.
 
 ## Skills & agents
 
