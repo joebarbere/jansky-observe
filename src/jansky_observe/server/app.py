@@ -34,13 +34,17 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 from sqlalchemy import Engine
+from sqlmodel import Session
 
 from jansky_observe import __version__
 from jansky_observe.config import Settings, settings_from_env
 from jansky_observe.control import ctl_request
 from jansky_observe.db import init_db
 from jansky_observe.frames import SpectralFrame, decode_zmq, pack_ws
+from jansky_observe.server.live_badge import LiveBadge
 from jansky_observe.server.routers import catalog, observations, wizard
+from jansky_observe.server.routers.captures import register_stopped_capture
+from jansky_observe.server.routers.captures import router as captures_router
 
 __all__ = ["Broadcaster", "CaptureStartBody", "app", "create_app"]
 
@@ -180,12 +184,13 @@ def _raise_for_ctl_error(reply: dict[str, Any]) -> None:
     raise HTTPException(status_code=409, detail=error)
 
 
-async def _zmq_relay(endpoint: str, broadcaster: Broadcaster) -> None:
+async def _zmq_relay(endpoint: str, broadcaster: Broadcaster, badge: LiveBadge) -> None:
     """SUBscribe to the capture daemon and publish decoded frames.
 
     ZeroMQ connects lazily, so a daemon that is not running yet is fine: the
     socket sits in ``recv`` (no busy loop) and frames flow whenever the
-    publisher appears. Malformed messages are logged and dropped.
+    publisher appears. Malformed messages are logged and dropped. Every
+    decoded frame also feeds the live HI badge's accumulating average.
     """
     ctx = zmq.asyncio.Context()
     sock = ctx.socket(zmq.SUB)
@@ -201,6 +206,7 @@ async def _zmq_relay(endpoint: str, broadcaster: Broadcaster) -> None:
             except (ValueError, KeyError, TypeError) as exc:
                 logger.warning("dropping malformed frame: %s", exc)
                 continue
+            badge.add_frame(frame)
             await broadcaster.publish(frame)
     except zmq.ZMQError as exc:
         logger.error("ZMQ relay for %s stopped: %s", endpoint, exc)
@@ -221,7 +227,9 @@ async def _lifespan(application: FastAPI) -> AsyncIterator[None]:
     broadcaster: Broadcaster = application.state.broadcaster
     if application.state.engine is None:
         application.state.engine = init_db(settings.data_dir)
-    task = asyncio.create_task(_zmq_relay(settings.zmq_endpoint, broadcaster))
+    task = asyncio.create_task(
+        _zmq_relay(settings.zmq_endpoint, broadcaster, application.state.live_badge)
+    )
     application.state.relay_task = task
     # FastMCP's HTTP transport runs a session manager inside the sub-app's own
     # lifespan — it must be entered here or /mcp requests 500.
@@ -259,11 +267,13 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
     application = FastAPI(title="jansky-observe", version=__version__, lifespan=_lifespan)
     application.state.settings = settings
     application.state.broadcaster = Broadcaster()
+    application.state.live_badge = LiveBadge()
     application.state.engine = engine
     application.mount("/static", StaticFiles(directory=str(_PACKAGE_DIR / "static")), name="static")
     application.include_router(observations.router)
     application.include_router(catalog.router)
     application.include_router(wizard.router)
+    application.include_router(captures_router)
     # The MCP surface (plan §12.4): Claude as a console peer of the browser UI.
     from jansky_observe.mcp import mount_mcp
 
@@ -312,8 +322,38 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
 
     @application.post("/api/capture/stop")
     async def capture_stop() -> dict[str, Any]:
-        """Stop the running capture; 409 if the daemon refuses."""
-        return _with_disk_conveniences(await _ctl({"cmd": "stop_capture"}))
+        """Stop the running capture; 409 if the daemon refuses.
+
+        A successful stop registers the finished file as a :class:`Capture`
+        row (settings parsed from the file itself, linked to the running
+        observation if one exists); its id is returned as ``capture_id``.
+        """
+        reply = await _ctl({"cmd": "stop_capture"})
+        reply["capture_id"] = await asyncio.to_thread(
+            register_stopped_capture, application.state.engine, reply
+        )
+        return _with_disk_conveniences(reply)
+
+    @application.get("/api/live/hi_badge")
+    async def live_hi_badge() -> dict[str, Any]:
+        """The live "am I seeing it?" badge (plan §5.2): running verdict + SNR.
+
+        Runs off-loop: the classification is milliseconds but the astropy LSR
+        window (when an observation is running) can take ~100 ms.
+        """
+        badge: LiveBadge = application.state.live_badge
+
+        def session_factory() -> Session:
+            return Session(application.state.engine)
+
+        return await asyncio.to_thread(badge.snapshot, session_factory)
+
+    @application.post("/api/live/hi_badge/reset")
+    async def live_hi_badge_reset() -> dict[str, Any]:
+        """Clear the badge's accumulating average (only the live accumulator)."""
+        badge: LiveBadge = application.state.live_badge
+        badge.reset()
+        return {"status": "accumulating", "n_frames": 0}
 
     @application.websocket(WS_LIVE_PATH)
     async def ws_live(websocket: WebSocket) -> None:

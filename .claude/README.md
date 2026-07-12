@@ -1,8 +1,8 @@
 # Claude Code automation for jansky-observe
 
-This directory holds the project's versioned **skills**. See the repo `CLAUDE.md` for the working
-rules, the **safety invariants** (the bias-tee rule), and the relationship to the siblings
-(`../jansky`, `../jansky-research`).
+This directory holds the project's versioned **skills** and **agents**. See the repo `CLAUDE.md`
+for the working rules, the **safety invariants** (the bias-tee rule), and the relationship to the
+siblings (`../jansky`, `../jansky-research`).
 
 ## Skills (`skills/`)
 
@@ -24,6 +24,29 @@ rules, the **safety invariants** (the bias-tee rule), and the relationship to th
 - `new-migration` — scaffold a forward schema migration: the next `(N, callable)` in
   `db.py`'s `MIGRATIONS` (`PRAGMA user_version`), the matching `models.py` change, and the
   round-trip test. Never edit or renumber an existing migration.
+- `observing-copilot` — the during-session companion: polls `get_live_status` + the live HI
+  badge (running SNR on the accumulating average) and reports the trend, warns when pointing
+  drift approaches half the 21° beam (nudge at ~10°, minutes-to-nudge from the drift rate),
+  answers "RFI or the line?" (Doppler window + persistence across frames), and appends
+  timestamped notes on request. Interprets the badge; never overrides it.
+- `analyze-observation` — post-session, for one observation id: run the deterministic
+  `hline_v1` classifier over every `.npz` capture via `run_classifier`, fetch `axis=vlsr`
+  spectra, interpret baseline quality / SNR / peak-velocity plausibility / RFI signs, and
+  write a markdown analysis note whose claims cite `ClassifierResult` rows — no unsupported
+  detection language (plan §12.5). Notes that v1 verdicts are threshold evidence only until
+  `hi4pi_xcheck` lands via jansky-research plan 78.
+
+## Agents (`agents/`)
+
+- `hi-data-analyst` — the amateur-radio-astronomer-analyst persona behind the post-session
+  skills: station numbers (0.7 m dish, HPBW ≈ 21°, 3 MSPS ≈ ±250 km/s, Manayunk), 21 cm
+  physics and v_LSR conventions, the v1 classifier's exact thresholds and limits, the
+  provenance rule, and the wrong-spectrum suspect order (RFI → baseline ripple →
+  frequency cal → pointing).
+- `dsp-reviewer` — read-only reviewer for diffs touching `capture/dsp.py`, `astro/`, or
+  `confirm/`: checks against the plan's numbers and astropy conventions and hunts the classic
+  unit bugs (topocentric vs LSR axis, Hz vs km/s, 10 vs 20·log10, fftshift, int16 `/32768`
+  scaling, Welch normalization, radio vs optical Doppler). Returns findings; makes no edits.
 
 ## Sharing with the siblings
 
@@ -35,9 +58,9 @@ mirror it in the others. The skills above are station-specific and stay here.
 ## Roadmap (plan §12.6)
 
 More assets ship with their milestones — the loop exists before the features do. M2's
-deliverables (the MCP surface on the API server — Claude as a console peer of the browser
-UI — plus `/plan-session`, `/troubleshoot-chain`, `/new-migration`) have shipped; remaining:
+deliverables (the MCP surface — Claude as a console peer of the browser UI — plus
+`/plan-session`, `/troubleshoot-chain`, `/new-migration`) and M3's (`/observing-copilot`,
+`/analyze-observation`, and the `hi-data-analyst` + `dsp-reviewer` agents) have shipped;
+remaining:
 
-- **M3** — `/observing-copilot`, `/analyze-observation`, and the `hi-data-analyst` +
-  `dsp-reviewer` agents.
 - **M4** — `/write-up`, `/compare-observations`.

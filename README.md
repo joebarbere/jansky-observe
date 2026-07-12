@@ -28,17 +28,17 @@ flowchart LR
 
 ## Status
 
-**M1 — first light — shipped:** the real Airspy source (bias tee forced OFF per the power
-rule), live waterfall + spectrum, captures to `.npz`/SigMF with a live disk readout — on top
-of M0's full pipeline (CI, release workflow with a release-blocking install gate, `install.sh`,
-QEMU install test against the pinned Pi OS image).
+**M2 — observation records — shipped:** observations, checklists, and the session wizard on a
+forward-migrating SQLite schema, astropy pointing + weather, and the read-mostly MCP surface —
+on top of M1's first light (real Airspy, live waterfall, captures to `.npz`/SigMF) and M0's
+full CI/release/install pipeline. **M3 — confirmation — is in progress.**
 
 | Tag | Milestone | Release means | |
 |---|---|---|---|
 | `v0.1.0` | M0 | Walking skeleton + the whole CI/release/install pipeline | ✅ done |
 | `v0.2.0` | M1 | First light: real Airspy source, capture to `.npz`/SigMF with live disk readout | ✅ done |
-| `v0.3.0` | M2 | Observation records, checklists, session wizard | ⏭ current |
-| `v0.4.0` | M3 | Confirmation: rule-based classifier + HI4PI cross-check | |
+| `v0.3.0` | M2 | Observation records, checklists, session wizard | ✅ done |
+| `v0.4.0` | M3 | Confirmation: v1 classifier; HI4PI cross-check follows via `jansky-research` | ⏭ current |
 | `v0.5.0` | M4 | Reports & photos: PDF export, Virgo/ezRA exporters | |
 | `v0.6.0` | M5 | Feature-complete — the `v1.0.0` release candidate | |
 | `v1.0.0` | — | After one real end-to-end observing campaign | |
@@ -95,6 +95,18 @@ claude mcp add --transport http jansky-observe http://raspberrypi.local:8000/mcp
 then `/plan-session` recommends tonight's target and pre-fills a draft observation in the
 wizard.
 
+### Confirmation
+
+"Am I actually seeing hydrogen?" gets a code answer, not a vibe. While observing, the live
+view carries an **HI badge** — a running SNR computed on the server's accumulating average
+spectrum. After the session, the deterministic classifier runs over any `.npz` capture
+(`run_classifier` via MCP, or `POST /api/captures/{id}/classify`): baseline fit, peak search
+inside the LSR-corrected Doppler window, verdict from SNR (`detected` ≥ 5, `uncertain` 2–5).
+Verdicts are stored as `ClassifierResult` rows (classifier name + version) with plots, and
+every spectrum is served on either axis (`?axis=mhz|vlsr`). `/analyze-observation` turns the
+results into an honest analysis note — verdicts come from code, Claude interprets. The HI4PI
+sky cross-check (v2) follows via `jansky-research`.
+
 ## Install on the Pi
 
 One prerequisite: a Raspberry Pi 5 running the pinned **Raspberry Pi OS Lite (64-bit) "Trixie"**
@@ -116,13 +128,15 @@ jansky-observe/
   src/jansky_observe/
     capture/      # SDR-owning daemon: sources, Welch PSD, device profiles, ZMQ publisher
     server/       # FastAPI app: REST, WebSocket live view, templates, waterfall.js
+    astro/        # astropy pointing + LSR spectral axes (topocentric ↔ v_LSR)
+    confirm/      # deterministic spectrum classifiers (hline_v1; HI4PI cross-check later)
     frames.py     # spectral-frame wire formats (daemon → server → browser)
     synthetic.py  # synthetic noise + fake-HI generators (M0, test fixtures)
     config.py     # JANSKY_OBSERVE_* env settings
   tests/          # pytest, synthetic fixtures only — no hardware in CI
   deploy/         # install.sh, OS_IMAGE, systemd units, udev rules, QEMU install test
   plans/          # the full project plan
-  .claude/        # versioned Claude Code skills (see .claude/README.md)
+  .claude/        # versioned Claude Code skills + agents (see .claude/README.md)
 ```
 
 ## Plan

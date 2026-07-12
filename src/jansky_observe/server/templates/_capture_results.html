@@ -1,0 +1,16 @@
+{# One capture's confirmation cell: verdict rows + the classify button (htmx). #}
+{% for r in results %}
+<div class="cap-result">
+  <span class="badge {{ r.verdict }}">{{ r.verdict.replace("_", " ") }}</span>
+  SNR {{ "%.1f"|format(r.score) }}
+  <span class="muted">{{ r.name }} v{{ r.version }} ({{ r.mode }})</span>
+  {% if r.mode == "post" %}<a href="/api/captures/{{ r.capture_id }}/plot" target="_blank">plot</a>{% endif %}
+</div>
+{% endfor %}
+{% if capture.format == "npz_spectra" %}
+<button class="btn btn-small" type="button"
+        hx-post="/captures/{{ capture.id }}/classify"
+        hx-target="#cap-confirm-{{ capture.id }}" hx-swap="innerHTML">Classify</button>
+{% elif not results %}
+<span class="muted">&mdash;</span>
+{% endif %}

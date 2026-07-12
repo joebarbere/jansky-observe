@@ -22,6 +22,7 @@ from jansky_observe.models import (
     Capture,
     ChecklistItemState,
     ChecklistTemplateItem,
+    ClassifierResult,
     Location,
     Observation,
     ObservationObserver,
@@ -87,6 +88,16 @@ def _detail_context(session: Session, observation: Observation) -> dict[str, Any
     captures = session.exec(
         select(Capture).where(Capture.observation_id == observation.id).order_by(col(Capture.id))
     ).all()
+    capture_ids = [c.id for c in captures if c.id is not None]
+    capture_results: dict[int, list[ClassifierResult]] = {}
+    if capture_ids:
+        results = session.exec(
+            select(ClassifierResult)
+            .where(col(ClassifierResult.capture_id).in_(capture_ids))
+            .order_by(col(ClassifierResult.id))
+        ).all()
+        for result in results:
+            capture_results.setdefault(result.capture_id, []).append(result)
     return {
         "obs": observation,
         "obs_type": get_or_404(session, ObservationType, observation.observation_type_id),
@@ -96,6 +107,7 @@ def _detail_context(session: Session, observation: Observation) -> dict[str, Any
         "checklist": checklist_rows(session, observation),
         "required_ok": required_items_ticked(session, observation),
         "captures": captures,
+        "capture_results": capture_results,
     }
 
 

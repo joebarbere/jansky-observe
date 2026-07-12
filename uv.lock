@@ -927,7 +927,7 @@ dev = [
 
 [[package]]
 name = "jansky-observe"
-version = "0.3.0"
+version = "0.4.0"
 source = { editable = "." }
 dependencies = [
     { name = "astropy" },
@@ -936,6 +936,7 @@ dependencies = [
     { name = "httpx" },
     { name = "jansky" },
     { name = "jinja2" },
+    { name = "matplotlib" },
     { name = "numpy" },
     { name = "pyzmq" },
     { name = "scipy" },
@@ -961,6 +962,7 @@ requires-dist = [
     { name = "httpx", specifier = ">=0.27" },
     { name = "jansky", editable = "../jansky" },
     { name = "jinja2", specifier = ">=3.1" },
+    { name = "matplotlib", specifier = ">=3.8" },
     { name = "numpy", specifier = ">=1.26" },
     { name = "pyzmq", specifier = ">=26" },
     { name = "scipy", specifier = ">=1.11" },
