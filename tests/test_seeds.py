@@ -87,6 +87,7 @@ def test_observation_types_seeded(engine: Engine) -> None:
         "HI pointed — rotation curve longitudes",
         "Continuum drift scan — Cas A / Cyg A",
         "Tsys sky/ground pair",
+        "Calibration sweep",
         "RFI survey",
         "RFI survey @ 1420",
         "injection test",

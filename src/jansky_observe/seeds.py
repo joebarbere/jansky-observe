@@ -65,6 +65,16 @@ TSYS_CHECKLIST: tuple[tuple[str, bool], ...] = (
     ("Identical SDR settings for both captures confirmed", True),
 )
 
+#: Guided receiver-calibration checklist (roadmap M7). The three captures are
+#: marked as their calibration kinds and attached to one calibration epoch.
+CALIBRATION_CHECKLIST: tuple[tuple[str, bool], ...] = (
+    ("Start a calibration epoch on the Calibration page", True),
+    ("Reference load (50 Ω) on the SDR input; capture, then mark it ref_load", True),
+    ("Point cold sky (high el, away from Sun/galactic plane); capture, mark cold_sky", True),
+    ("Point warm ground; capture, mark hot_ground", True),
+    ("Identical SDR settings across all three cal captures confirmed", True),
+)
+
 INJECTION_CHECKLIST: tuple[tuple[str, bool], ...] = (
     ("Attenuator pad stack in line — never connect HackRF TX output directly", True),
 )
@@ -119,6 +129,15 @@ OBSERVATION_TYPES: tuple[tuple[str, str, dict[str, Any], tuple[tuple[str, bool],
         "in jansky-research).",
         HI_SDR_SETTINGS,
         TSYS_CHECKLIST,
+    ),
+    (
+        "Calibration sweep",
+        "Guided receiver calibration (roadmap M7): a ref-load (50 Ω), cold-sky, and "
+        "hot-ground capture under one calibration epoch, so science captures carry cal-epoch "
+        "provenance (plans 78/79). Start the epoch on the Calibration page, then mark each "
+        "capture's kind from its list.",
+        HI_SDR_SETTINGS,
+        CALIBRATION_CHECKLIST,
     ),
     (
         "RFI survey",

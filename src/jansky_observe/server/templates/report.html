@@ -170,10 +170,19 @@
   {% endif %}
 </section>
 
+{% if cal_epochs %}
+<section class="keep-together">
+  <h2>Calibration</h2>
+  <p>Captures in this session reference calibration epoch(s):
+    {% for e in cal_epochs %}#{{ e.id }} ({{ e.started_at | dt }}){% if not loop.last %}, {% endif %}{% endfor %}.
+    Science captures are stamped with the epoch in effect when they ran (plans 78/79).</p>
+</section>
+{% endif %}
+
 {% for entry in captures %}
 {% if entry.profile_uri or entry.waterfall_uri %}
 <section>
-  <h2>Capture {{ entry.capture.id }} — {{ entry.filename }}</h2>
+  <h2>Capture {{ entry.capture.id }} — {{ entry.filename }}{% if entry.capture.kind != "science" %} <span class="badge">{{ entry.capture.kind }}</span>{% endif %}</h2>
   {% if entry.profile_uri %}
   <div class="figure-block">
     <img class="report-figure" src="{{ entry.profile_uri }}" alt="integrated profile">

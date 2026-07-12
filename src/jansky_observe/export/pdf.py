@@ -32,6 +32,7 @@ from jansky_observe.astro.pointing import target_coord
 from jansky_observe.capture.hackrf_sweep import rfi_sweep_comparison
 from jansky_observe.export.figures import profile_figure, waterfall_figure
 from jansky_observe.models import (
+    CalibrationEpoch,
     Capture,
     ChecklistItemState,
     ChecklistTemplateItem,
@@ -185,6 +186,13 @@ def _gather_context(session: Session, observation: Observation, data_dir: Path) 
         .order_by(col(ChecklistTemplateItem.order_index))
     ).all()
     highlight, photos = _photo_entries(session, observation, data_dir)
+    obs_captures = session.exec(
+        select(Capture).where(Capture.observation_id == observation.id).order_by(col(Capture.id))
+    ).all()
+    epoch_ids = sorted({c.cal_epoch_id for c in obs_captures if c.cal_epoch_id is not None})
+    cal_epochs = [
+        e for e in (session.get(CalibrationEpoch, eid) for eid in epoch_ids) if e is not None
+    ]
     return {
         "obs": observation,
         "obs_type": obs_type,
@@ -197,6 +205,7 @@ def _gather_context(session: Session, observation: Observation, data_dir: Path) 
         "highlight": highlight,
         "photos": photos,
         "captures": _capture_entries(session, observation, source, location, data_dir),
+        "cal_epochs": cal_epochs,
         "rfi_comparison": rfi_sweep_comparison(
             session.exec(
                 select(Capture)

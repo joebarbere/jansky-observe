@@ -161,6 +161,18 @@ feature work.
   observation detail (`_rfi_comparison.html`) and in the PDF report. Read-only over the CSVs;
   no new MCP verbs.
 
+**M7 (v0.8.0 "Calibration & scheduling") is in progress** — see `plans/roadmap-post-v0.6.md`.
+Landed so far:
+- **Calibration captures**: `CalibrationEpoch` + `Capture.kind` (science / ref_load / cold_sky /
+  hot_ground) + `Capture.cal_epoch_id` (migration 6 = table + columns; migration 7 = reseed for
+  the "Calibration sweep" ObservationType). A science capture is stamped at registration with
+  the latest epoch (`captures.latest_cal_epoch_id`); calibration captures are marked from the
+  observation's capture list (`POST /captures/{id}/kind`, HTML-only) and attach to the current
+  epoch. `server/routers/calibration.py`: a `/calibration` page + `POST /calibration/epochs` +
+  `GET /api/calibration_epochs`. Cal provenance surfaces in the capture meta (kind +
+  cal_epoch_id), the calibration API, and the PDF report (a Calibration section + per-capture
+  kind). Still to come in M7: scheduler + session timer, drift-scan campaign mode, sky chart.
+
 ## Skills & agents
 
 - `/verify` — the pre-commit gate: lint → typecheck → coverage → the end-to-end synthetic smoke.

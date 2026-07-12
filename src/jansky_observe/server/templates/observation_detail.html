@@ -103,10 +103,19 @@
   <h2>Captures</h2>
   {% if captures %}
   <table class="list">
-    <tr><th>device</th><th>format</th><th>file</th><th>size</th><th>start</th><th>end</th><th>confirmation</th><th></th></tr>
+    <tr><th>device</th><th>format</th><th>kind</th><th>file</th><th>size</th><th>start</th><th>end</th><th>confirmation</th><th></th></tr>
     {% for c in captures %}
     <tr{% if c.purged_at is not none %} class="purged"{% endif %}>
-      <td>{{ c.device }}</td><td>{{ c.format }}</td><td>{{ c.path }}</td>
+      <td>{{ c.device }}</td><td>{{ c.format }}</td>
+      <td>
+        <form method="post" action="/captures/{{ c.id }}/kind" class="inline-kind">
+          <select name="kind" onchange="this.form.requestSubmit()" title="mark calibration captures (roadmap M7)">
+            {% for k in capture_kinds %}<option value="{{ k }}"{% if c.kind == k %} selected{% endif %}>{{ k }}</option>{% endfor %}
+          </select>
+        </form>
+        {% if c.kind != "science" and c.cal_epoch_id %}<span class="muted">· epoch #{{ c.cal_epoch_id }}</span>{% endif %}
+      </td>
+      <td>{{ c.path }}</td>
       <td>{{ "%.1f"|format(c.size_bytes / 1e6) }} MB</td>
       <td>{{ c.start | dt }}</td><td>{{ c.end | dt }}</td>
       <td id="cap-confirm-{{ c.id }}">

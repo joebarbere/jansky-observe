@@ -41,6 +41,7 @@ from jansky_observe.confirm.classifier import (
 from jansky_observe.confirm.plots import verdict_plot
 from jansky_observe.control import ctl_request
 from jansky_observe.models import (
+    CalibrationEpoch,
     Capture,
     ClassifierResult,
     Location,
@@ -106,6 +107,17 @@ def _running_observation_id(session: Session) -> int | None:
     return None if observation is None else observation.id
 
 
+def latest_cal_epoch_id(session: Session) -> int | None:
+    """The most recent calibration epoch's id, or ``None`` (roadmap M7).
+
+    A science capture is stamped with this at registration — the calibration in
+    effect when it was taken (plan 79's cal-epoch provenance)."""
+    epoch = session.exec(
+        select(CalibrationEpoch).order_by(col(CalibrationEpoch.started_at).desc())
+    ).first()
+    return None if epoch is None else epoch.id
+
+
 def register_stopped_capture(engine: Engine | None, status: dict[str, Any]) -> int | None:
     """Create a :class:`Capture` row for a capture the daemon just stopped.
 
@@ -139,6 +151,7 @@ def register_stopped_capture(engine: Engine | None, status: dict[str, Any]) -> i
             start=started,
             end=ended,
             sdr_settings=parse_capture_settings(Path(str(path))),
+            cal_epoch_id=latest_cal_epoch_id(session),  # science capture: cal in effect
         )
         session.add(capture)
         session.commit()
