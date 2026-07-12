@@ -28,6 +28,24 @@
   const wfCtx = wfCanvas.getContext("2d");
   const avgCountEl = document.getElementById("avg-count");
   const resetAvgBtn = document.getElementById("btn-reset-avg");
+
+  // ---- theme colors (roadmap M6) --------------------------------------
+  // The canvas backdrops, grid, labels, and traces come from CSS custom
+  // properties so the plots track the page theme (light/dark). Cached, and
+  // refreshed when ui.js dispatches "themechange".
+  const THEME = { wfBg: "", specBg: "", grid: "", label: "", live: "", avg: "" };
+  function refreshTheme() {
+    const cs = getComputedStyle(document.documentElement);
+    const get = (name, fallback) => (cs.getPropertyValue(name).trim() || fallback);
+    THEME.wfBg = get("--wf-bg", "#0b0e14");
+    THEME.specBg = get("--spec-bg", "#12161f");
+    THEME.grid = get("--border", "#232a38");
+    THEME.label = get("--muted", "#7a8699");
+    THEME.live = get("--trace-live", "rgba(79, 195, 247, 0.35)");
+    THEME.avg = get("--trace-avg", "#ffe082");
+  }
+  refreshTheme();
+  window.addEventListener("themechange", refreshTheme);
   const startNpzBtn = document.getElementById("btn-start-npz");
   const startSigmfBtn = document.getElementById("btn-start-sigmf");
   const stopBtn = document.getElementById("btn-stop");
@@ -198,7 +216,7 @@
   function drawWaterfall() {
     const w = wfCanvas.width;
     const h = wfCanvas.height;
-    wfCtx.fillStyle = "#0b0e14";
+    wfCtx.fillStyle = THEME.wfBg;
     wfCtx.fillRect(0, 0, w, h);
     if (!off.canvas || off.rows === 0) return;
     wfCtx.imageSmoothingEnabled = false;
@@ -225,7 +243,7 @@
       top: MARGIN.top * dpr,
       bottom: MARGIN.bottom * dpr,
     };
-    specCtx.fillStyle = "#12161f";
+    specCtx.fillStyle = THEME.specBg;
     specCtx.fillRect(0, 0, w, h);
     if (!latest) return;
 
@@ -245,8 +263,8 @@
     const yOf = (db) => m.top + (1 - (db - yLo) / (yHi - yLo)) * ph;
 
     // Grid + labels.
-    specCtx.strokeStyle = "#232a38";
-    specCtx.fillStyle = "#7a8699";
+    specCtx.strokeStyle = THEME.grid;
+    specCtx.fillStyle = THEME.label;
     specCtx.lineWidth = 1;
     specCtx.font = 10 * dpr + "px monospace";
 
@@ -290,9 +308,9 @@
     }
 
     // Instantaneous trace (dimmed) behind the brighter accumulating average.
-    trace(power, 1, "rgba(79, 195, 247, 0.35)", 1.25);
+    trace(power, 1, THEME.live, 1.25);
     if (avg.sum && avg.count > 0 && avg.sum.length === power.length) {
-      trace(avg.sum, 1 / avg.count, "#ffe082", 1.5);
+      trace(avg.sum, 1 / avg.count, THEME.avg, 1.5);
     }
   }
 

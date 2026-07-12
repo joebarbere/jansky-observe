@@ -88,6 +88,37 @@ def test_diagnostics_route_returns_all_checks(tmp_path) -> None:
     assert checks["daemon"]["status"] == "error"
 
 
+def test_dt_filter_emits_localizable_time_element() -> None:
+    from datetime import datetime
+
+    from jansky_observe.server.routers import _fmt_dt
+
+    out = str(_fmt_dt(datetime(2026, 7, 12, 14, 5, 0)))
+    assert '<time class="ts"' in out
+    assert 'datetime="2026-07-12T14:05:00Z"' in out
+    assert "2026-07-12 14:05 UTC" in out  # JS-off fallback text
+    assert str(_fmt_dt(None)) == "—"
+
+
+def test_index_has_theme_and_localization_controls() -> None:
+    client = TestClient(create_app(Settings(zmq_endpoint=DEAD_ENDPOINT)))
+    body = client.get("/").text
+    assert 'localStorage.getItem("theme")' in body  # no-flash head script
+    assert "/static/ui.js" in body
+    assert 'id="theme-toggle"' in body
+    assert 'id="time-toggle"' in body
+
+
+def test_ui_and_theme_assets_served() -> None:
+    client = TestClient(create_app(Settings(zmq_endpoint=DEAD_ENDPOINT)))
+    ui = client.get("/static/ui.js")
+    assert ui.status_code == 200
+    assert "themechange" in ui.text
+    css = client.get("/static/style.css").text
+    assert '[data-theme="light"]' in css  # the light palette exists
+    assert "prefers-color-scheme: light" in css
+
+
 def test_index_renders_live_page() -> None:
     client = TestClient(create_app(Settings(zmq_endpoint=DEAD_ENDPOINT)))
     resp = client.get("/")
