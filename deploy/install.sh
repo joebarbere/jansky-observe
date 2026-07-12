@@ -45,7 +45,9 @@ DEFAULT_FILE="/etc/default/jansky-observe"
 HEALTH_URL="http://127.0.0.1:8000/healthz"
 HEALTH_TIMEOUT=90             # seconds to wait for /healthz
 
-APT_DEPS=(curl ca-certificates git libusb-1.0-0 airspy hackrf)
+# libpango*/fonts: WeasyPrint's system dependencies (PDF reports, M4).
+APT_DEPS=(curl ca-certificates git libusb-1.0-0 airspy hackrf
+    libpango-1.0-0 libpangoft2-1.0-0 fonts-dejavu-core)
 
 # ---------------------------------------------------------------------------
 # Embedded deploy assets (source of truth at install time).

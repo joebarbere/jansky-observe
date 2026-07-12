@@ -274,6 +274,68 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--accent); }
 .rec { color: var(--muted); font-size: 11px; margin-left: 0.4rem; }
 #checklist form { margin-top: 0.75rem; }
 
+/* ---- photos (M4, plan §3/§5.3): thumbnail grid, highlight, drop zone ------ */
+
+.photo-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.photo-card {
+  position: relative;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.4rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.photo-card img {
+  display: block;
+  width: 100%;
+  height: 140px;
+  object-fit: cover;
+  border-radius: 3px;
+}
+
+/* The highlight reads larger and badged (plan §3: bigger on PDF/display). */
+.photo-card.highlight {
+  grid-column: span 2;
+  border-color: var(--accent);
+}
+.photo-card.highlight img { height: 300px; }
+
+.badge.photo-highlight {
+  position: absolute;
+  top: 0.7rem;
+  left: 0.7rem;
+  background: var(--accent);
+}
+
+.photo-card figcaption { display: flex; flex-direction: column; gap: 0.25rem; }
+.photo-caption input { flex: 1 1 auto; min-width: 0; font-size: 12px; }
+.photo-actions { font-size: 11px; gap: 0.4rem; }
+.photo-actions .muted { margin-right: auto; }
+
+.photo-upload { display: flex; flex-direction: column; gap: 0.5rem; }
+
+.drop-zone {
+  border: 2px dashed var(--border);
+  border-radius: 4px;
+  padding: 1rem;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.drop-zone.drag-over { border-color: var(--accent); background: var(--panel); }
+
 .offsets-big { font-size: 1.4rem; color: var(--accent); }
 .rf-chain { margin-left: 1.5rem; }
 .rf-chain li { padding: 0.15rem 0; }
