@@ -19,6 +19,8 @@ not the profile in general. Goal: a small revenue stream funding further station
 
 ## Step 1 — accounts (only Joe can do these; identity + payout verification)
 
+**Done 2026-07-12 — both accounts created.**
+
 1. **GitHub Sponsors**: <https://github.com/sponsors> → "Join the sponsors program" for
    the `joebarbere` account → complete the Stripe Connect onboarding (bank + identity) →
    fill the sponsor profile (see pitch below) → submit for approval (usually days).
@@ -26,6 +28,9 @@ not the profile in general. Goal: a small revenue stream funding further station
    connect PayPal or Stripe for payouts → set the page copy (same pitch, shorter).
 
 ## Step 2 — wire the repos (Claude does this once accounts exist)
+
+**Done 2026-07-12** — FUNDING.yml + README support sections landed in all three repos;
+the GitHub profile README carries the same pitch.
 
 - `.github/FUNDING.yml` in **jansky, jansky-observe, jansky-research**:
 
