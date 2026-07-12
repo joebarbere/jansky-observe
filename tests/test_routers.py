@@ -255,6 +255,18 @@ def test_observations_list_newest_first(client: TestClient, engine: Engine) -> N
     assert names == ["second", "first"]
 
 
+def test_sky_chart_route(client: TestClient) -> None:
+    body = client.get("/api/sky_chart").json()
+    assert {"sources", "sun", "moon", "galactic_plane", "beam", "location", "station"} <= set(body)
+    assert body["location"]["name"] == "Home"
+    assert len(body["sources"]) >= 5  # the seeded catalog minus the Sun source
+    assert all({"name", "kind", "az_deg", "el_deg"} <= set(s) for s in body["sources"])
+    assert not any(s["kind"] == "sun" for s in body["sources"])  # Sun is its own symbol
+    assert body["beam"] is None  # no running observation
+    page = client.get("/sky").text
+    assert "/static/skychart.js" in page and 'id="skychart"' in page
+
+
 def test_archive_hides_from_list_and_mcp_then_restores(client: TestClient, engine: Engine) -> None:
     keep = _create_observation(client, engine, name="keep")
     junk = _create_observation(client, engine, name="qa junk")
