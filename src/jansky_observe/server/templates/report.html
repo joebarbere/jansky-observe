@@ -215,6 +215,32 @@
   {% endif %}
 </section>
 
+{% if rfi_comparison %}
+<section class="keep-together">
+  <h2>RFI before/after</h2>
+  <p>Capture #{{ rfi_comparison.before_id }} (before) vs #{{ rfi_comparison.after_id }} (after).
+    {% if rfi_comparison.n_risen %}
+    {{ rfi_comparison.n_risen }} bin(s) rose ≥ {{ "%.0f"|format(rfi_comparison.rise_db) }} dB.
+    {% else %}
+    No bin rose ≥ {{ "%.0f"|format(rfi_comparison.rise_db) }} dB — the environment held steady.
+    {% endif %}
+  </p>
+  {% if rfi_comparison.risen %}
+  <table class="list">
+    <tr><th>frequency</th><th>before</th><th>after</th><th>Δ</th></tr>
+    {% for r in rfi_comparison.risen %}
+    <tr>
+      <td>{{ "%.3f"|format(r.freq_hz / 1e6) }} MHz</td>
+      <td>{{ "%.1f"|format(r.before_db) }} dB</td>
+      <td>{{ "%.1f"|format(r.after_db) }} dB</td>
+      <td>+{{ "%.1f"|format(r.delta_db) }} dB</td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% endif %}
+</section>
+{% endif %}
+
 <section>
   <h2>Notes</h2>
   {% if obs.notes %}

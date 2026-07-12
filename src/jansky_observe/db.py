@@ -108,11 +108,28 @@ def _migration_4_capture_purged_at(conn: Connection) -> None:
         conn.exec_driver_sql("ALTER TABLE capture ADD COLUMN purged_at DATETIME")
 
 
+def _migration_5_rfi_survey_1420_type(conn: Connection) -> None:
+    """Seed the guided "RFI survey @ 1420" ObservationType + its before/after
+    checklist (roadmap M6). This is a data-only migration: it re-runs the
+    idempotent :func:`seeds.seed_observation_types`, which inserts only the
+    ObservationTypes missing by name — so on an existing station it adds just
+    the new type, and on a fresh database (where migration 1 already seeded it
+    from ``seeds.OBSERVATION_TYPES``) it is a no-op. Mirrors how migration 1
+    itself seeds via the models.
+    """
+    from jansky_observe.seeds import seed_observation_types
+
+    with Session(conn) as session:
+        seed_observation_types(session)
+        session.commit()
+
+
 MIGRATIONS: list[tuple[int, Callable[[Connection], None]]] = [
     (1, _migration_1_initial_schema),
     (2, _migration_2_station_stellarium_url),
     (3, _migration_3_observation_archived_at),
     (4, _migration_4_capture_purged_at),
+    (5, _migration_5_rfi_survey_1420_type),
 ]
 
 

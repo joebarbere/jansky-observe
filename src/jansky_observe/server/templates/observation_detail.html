@@ -130,6 +130,8 @@
   {% endif %}
 </section>
 
+{% include "_rfi_comparison.html" %}
+
 <section class="pane pad">
   <h2>Photos</h2>
   <div id="photos" hx-get="/observations/{{ obs.id }}/photos" hx-trigger="load" hx-swap="outerHTML">

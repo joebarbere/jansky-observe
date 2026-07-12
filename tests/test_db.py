@@ -206,3 +206,50 @@ def test_migration_3_4_upgrade_from_version_2_keeps_data(tmp_path: Path) -> None
 
     db.migrate(engine)  # re-run is a no-op
     assert _user_version(engine) == max(version for version, _ in db.MIGRATIONS)
+
+
+# ---- migration 5: the "RFI survey @ 1420" ObservationType (roadmap M6) -------------
+
+
+def _type_names(engine: Engine) -> set[str]:
+    from jansky_observe.models import ObservationType
+
+    with db.session(engine) as s:
+        return {t.name for t in s.exec(select(ObservationType)).all()}
+
+
+def test_migration_5_fresh_db_has_rfi_survey_1420_type(tmp_path: Path) -> None:
+    engine = db.init_db(tmp_path / "data")
+    assert "RFI survey @ 1420" in _type_names(engine)
+
+
+def test_migration_5_seeds_the_type_into_a_version_4_db(tmp_path: Path) -> None:
+    from jansky_observe.models import ChecklistTemplateItem, ObservationType
+
+    # Build a database stopped at version 4 (all migrations up to purged_at) but
+    # WITHOUT the new type — simulate a pre-M6-final station by deleting it.
+    engine = db.get_engine(tmp_path / "data")
+    with engine.begin() as conn:
+        for version, apply in db.MIGRATIONS[:4]:  # migrations 1..4
+            apply(conn)
+            conn.exec_driver_sql(f"PRAGMA user_version = {version}")
+        conn.exec_driver_sql("DELETE FROM observation_type WHERE name = 'RFI survey @ 1420'")
+    assert _user_version(engine) == 4
+    assert "RFI survey @ 1420" not in _type_names(engine)
+
+    db.migrate(engine)  # runs migration 5
+    assert _user_version(engine) == max(version for version, _ in db.MIGRATIONS)
+    assert "RFI survey @ 1420" in _type_names(engine)
+    # The before/after checklist rode in with it.
+    with db.session(engine) as s:
+        rfi = s.exec(
+            select(ObservationType).where(ObservationType.name == "RFI survey @ 1420")
+        ).one()
+        items = s.exec(
+            select(ChecklistTemplateItem).where(ChecklistTemplateItem.observation_type_id == rfi.id)
+        ).all()
+    assert any("BEFORE sweep" in i.text for i in items)
+    assert any("AFTER sweep" in i.text for i in items)
+
+    db.migrate(engine)  # re-run is a no-op (idempotent seed)
+    assert _user_version(engine) == max(version for version, _ in db.MIGRATIONS)

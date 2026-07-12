@@ -69,6 +69,18 @@ INJECTION_CHECKLIST: tuple[tuple[str, bool], ...] = (
     ("Attenuator pad stack in line — never connect HackRF TX output directly", True),
 )
 
+#: Guided before/after RFI survey around the 1420 MHz window (roadmap M6). The
+#: two sweeps must share identical HackRF settings so the station can compare
+#: them bin-for-bin.
+RFI_SURVEY_1420_CHECKLIST: tuple[tuple[str, bool], ...] = (
+    ("Antenna/feed connected through the normal Stage-1 chain (survey as observed)", True),
+    ("Run the BEFORE sweep across the 1420 window (RFI-sweep button / start_rfi_sweep)", True),
+    ("Note any bins standing above the noise floor near 1420.4 MHz", False),
+    ("Run the observing session, or wait the comparison interval", False),
+    ("Run the AFTER sweep with identical HackRF settings (start/stop/gain)", True),
+    ("Review the before/after comparison on this page; flag new or grown interferers", True),
+)
+
 #: (name, description, default SDR settings, checklist) per plan §5.4.
 OBSERVATION_TYPES: tuple[tuple[str, str, dict[str, Any], tuple[tuple[str, bool], ...]], ...] = (
     (
@@ -114,6 +126,15 @@ OBSERVATION_TYPES: tuple[tuple[str, str, dict[str, Any], tuple[tuple[str, bool],
         "does the window pass-through actually see.",
         {"sweep_start_hz": 1e9, "sweep_end_hz": 2e9},
         (),
+    ),
+    (
+        "RFI survey @ 1420",
+        "Guided before/after HackRF sweep around the 1420 MHz window (roadmap M6): run one "
+        "sweep, observe (or wait), run another with identical settings; the station "
+        "summarizes which bins are new or louder. What does the pass-through see, and did it "
+        "change over the session?",
+        {"sweep_start_hz": 1.30e9, "sweep_end_hz": 1.70e9},
+        RFI_SURVEY_1420_CHECKLIST,
     ),
     (
         "injection test",

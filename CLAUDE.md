@@ -114,8 +114,8 @@ jansky-research plan 78** per plan §6 — the comparison harness is built once 
 consumed here. The full plan lives in `plans/jansky_observe.md` — read it before any
 feature work.
 
-**M6 (v0.7.0 "station cockpit") is in progress** — see `plans/roadmap-post-v0.6.md`. Landed
-so far:
+**M6 (v0.7.0 "station cockpit") is feature-complete** (all seven pieces below landed; the
+`v0.7.0` tag is cut with `/release` once these merge) — see `plans/roadmap-post-v0.6.md`.
 - **Diagnostics**: `GET /api/diagnostics` + the `get_diagnostics` MCP tool (now **18 tools**),
   a best-effort bundle in `server/diagnostics.py` (systemd units → SDR USB → daemon
   reachability + frame age → Pi thermals → disk → DB schema version → journal errors), each
@@ -151,8 +151,12 @@ so far:
   env file: each row is an integrated spectrum, so 4 fps is a spectrometer cadence, not a
   render limit. `waterfall.js` adds sub-frame **smooth-scroll interpolation** (rAF loop, EMA
   of the observed frame gap; honors `prefers-reduced-motion`).
-
-Still to come in M6: RFI-survey template.
+- **RFI-survey template**: a seeded `"RFI survey @ 1420"` ObservationType (migration 5, an
+  idempotent reseed) with a before/after checklist that drives the existing HackRF
+  `rfi_sweep`. `hackrf_sweep.compare_sweeps` + `rfi_sweep_comparison` reduce the first/last
+  `hackrf_sweep_csv` captures to the bins that rose ≥ 6 dB; the summary renders on the
+  observation detail (`_rfi_comparison.html`) and in the PDF report. Read-only over the CSVs;
+  no new MCP verbs.
 
 ## Skills & agents
 

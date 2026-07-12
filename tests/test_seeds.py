@@ -88,6 +88,7 @@ def test_observation_types_seeded(engine: Engine) -> None:
         "Continuum drift scan — Cas A / Cyg A",
         "Tsys sky/ground pair",
         "RFI survey",
+        "RFI survey @ 1420",
         "injection test",
     }
     with db.session(engine) as s:

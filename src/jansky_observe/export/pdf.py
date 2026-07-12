@@ -29,6 +29,7 @@ from sqlmodel import Session, col, select
 
 from jansky_observe import __version__
 from jansky_observe.astro.pointing import target_coord
+from jansky_observe.capture.hackrf_sweep import rfi_sweep_comparison
 from jansky_observe.export.figures import profile_figure, waterfall_figure
 from jansky_observe.models import (
     Capture,
@@ -196,6 +197,13 @@ def _gather_context(session: Session, observation: Observation, data_dir: Path) 
         "highlight": highlight,
         "photos": photos,
         "captures": _capture_entries(session, observation, source, location, data_dir),
+        "rfi_comparison": rfi_sweep_comparison(
+            session.exec(
+                select(Capture)
+                .where(Capture.observation_id == observation.id)
+                .order_by(col(Capture.id))
+            ).all()
+        ),
         "generated_at": utcnow(),
         "version": __version__,
     }

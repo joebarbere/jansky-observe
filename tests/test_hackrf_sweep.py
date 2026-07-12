@@ -11,6 +11,7 @@ import sys
 import threading
 from collections.abc import Callable, Iterator
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -20,7 +21,13 @@ from sqlalchemy import Engine
 from sqlmodel import Session, select
 
 from jansky_observe.capture import hackrf_sweep
-from jansky_observe.capture.hackrf_sweep import build_sweep_cmd, run_sweep, summarize_sweep
+from jansky_observe.capture.hackrf_sweep import (
+    build_sweep_cmd,
+    compare_sweeps,
+    rfi_sweep_comparison,
+    run_sweep,
+    summarize_sweep,
+)
 from jansky_observe.config import Settings
 from jansky_observe.db import init_db
 from jansky_observe.models import Capture, Observation, ObservationType, RadioSource, utcnow
@@ -131,6 +138,78 @@ def test_summarize_empty_csv_raises(tmp_path):
     empty.write_text("")
     with pytest.raises(ValueError, match="no sweep rows"):
         summarize_sweep(empty)
+
+
+# ---- compare_sweeps / rfi_sweep_comparison (roadmap M6) -----------------------------
+
+# One sweep row over 4 bins of 1 MHz starting at 1419 MHz → centers 1419.5,
+# 1420.5, 1421.5, 1422.5 MHz. hackrf_sweep CSV columns: date, time, hz_low,
+# hz_high, width, n_samples, then one power per bin.
+_HZ_LOW = 1_419_000_000.0
+_WIDTH = 1_000_000.0
+
+
+def _write_sweep(path, powers):
+    row = f"2026-01-01, 00:00:00, {_HZ_LOW}, {_HZ_LOW + 4 * _WIDTH}, {_WIDTH}, 20"
+    path.write_text(row + ", " + ", ".join(str(p) for p in powers) + "\n")
+    return path
+
+
+def test_compare_sweeps_flags_risen_bins(tmp_path):
+    before = _write_sweep(tmp_path / "before.csv", [-70, -68, -71, -69])
+    after = _write_sweep(tmp_path / "after.csv", [-70, -50, -71, -66])  # bin1 +18, bin3 +3
+    out = compare_sweeps(before, after, rise_db=6.0)
+    assert out["n_risen"] == 1  # only the +18 dB bin clears the 6 dB threshold
+    risen = out["risen"][0]
+    assert risen["freq_hz"] == pytest.approx(_HZ_LOW + 1.5 * _WIDTH)  # 1420.5 MHz bin
+    assert risen["delta_db"] == pytest.approx(18.0)
+    assert risen["before_db"] == pytest.approx(-68.0)
+    assert risen["after_db"] == pytest.approx(-50.0)
+    assert out["after_loudest"][0]["power_db"] == pytest.approx(-50.0)
+
+
+def test_compare_sweeps_steady_environment(tmp_path):
+    before = _write_sweep(tmp_path / "b.csv", [-70, -68, -71, -69])
+    after = _write_sweep(tmp_path / "a.csv", [-71, -69, -70, -70])  # all within noise
+    assert compare_sweeps(before, after)["n_risen"] == 0
+
+
+def test_rfi_sweep_comparison_pairs_first_and_last(tmp_path):
+    b = _write_sweep(tmp_path / "b.csv", [-70, -68, -71, -69])
+    a = _write_sweep(tmp_path / "a.csv", [-70, -50, -71, -69])
+    caps = [
+        SimpleNamespace(id=1, format="hackrf_sweep_csv", path=str(b), purged_at=None),
+        SimpleNamespace(id=2, format="npz_spectra", path="x", purged_at=None),  # ignored
+        SimpleNamespace(id=3, format="hackrf_sweep_csv", path=str(a), purged_at=None),
+    ]
+    out = rfi_sweep_comparison(caps)
+    assert out is not None
+    assert out["before_id"] == 1 and out["after_id"] == 3
+    assert out["n_risen"] == 1
+
+
+def test_rfi_sweep_comparison_needs_two_sweeps(tmp_path):
+    b = _write_sweep(tmp_path / "b.csv", [-70, -68, -71, -69])
+    one = [SimpleNamespace(id=1, format="hackrf_sweep_csv", path=str(b), purged_at=None)]
+    assert rfi_sweep_comparison(one) is None
+    assert rfi_sweep_comparison([]) is None
+
+
+def test_rfi_sweep_comparison_skips_purged_and_missing(tmp_path):
+    b = _write_sweep(tmp_path / "b.csv", [-70, -68, -71, -69])
+    a = _write_sweep(tmp_path / "a.csv", [-70, -50, -71, -69])
+    # One of the pair is purged → fewer than two usable → None.
+    purged = [
+        SimpleNamespace(id=1, format="hackrf_sweep_csv", path=str(b), purged_at="2026-01-01"),
+        SimpleNamespace(id=2, format="hackrf_sweep_csv", path=str(a), purged_at=None),
+    ]
+    assert rfi_sweep_comparison(purged) is None
+    # Two present but a file is gone → compare raises → None (best-effort).
+    gone = [
+        SimpleNamespace(id=1, format="hackrf_sweep_csv", path=str(b), purged_at=None),
+        SimpleNamespace(id=2, format="hackrf_sweep_csv", path="/nope/missing.csv", purged_at=None),
+    ]
+    assert rfi_sweep_comparison(gone) is None
 
 
 # ---- /api/rfi_sweep endpoint (fake REP daemon, pattern from test_captures_api) ------
