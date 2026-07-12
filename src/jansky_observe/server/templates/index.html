@@ -27,6 +27,16 @@
       <span id="hi-badge" class="badge hi-accum" title="live &quot;am I seeing it?&quot; verdict on the server's accumulating average">HI &ndash;</span>
       <a id="hi-badge-reset" href="#" title="clear the live accumulating average">reset</a>
     </span>
+    <span class="ctl-group" id="audio-group" hidden>
+      <button id="audio-toggle" class="btn btn-small" type="button" aria-pressed="false"
+              title="sonify the live spectrum — client-side WebAudio, no extra Pi load">🔇 Audio</button>
+      <select id="audio-mode" class="btn-small" title="sonification mode" disabled>
+        <option value="receiver">Receiver</option>
+        <option value="doppler">Doppler pitch</option>
+        <option value="geiger">Geiger</option>
+        <option value="drone">Drone</option>
+      </select>
+    </span>
     <span id="version">jansky-observe {{ version }}</span>
   </header>
   <section id="capture-panel" class="pane">
@@ -63,6 +73,7 @@
     </section>
     <div id="overlay">waiting for capture daemon&hellip;</div>
   </main>
+  <script src="/static/audio.js"></script>
   <script src="/static/waterfall.js"></script>
 </body>
 </html>

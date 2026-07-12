@@ -138,8 +138,14 @@ so far:
   filter emits `<time class="ts" datetime="…Z">…UTC</time>` and `ui.js` rewrites them to the
   viewer's locale or UTC (toggle persisted); UTC stays canonical in the DB and exports. Both
   toggles live in the cockpit bar.
+- **Spectrum audio**: `static/audio.js` (`window.SpectrumAudio`) sonifies the live PSD the
+  WebSocket already delivers — client-side WebAudio, no backend. `waterfall.js`'s `onFrame`
+  feeds each frame; a live-view control (on/off + mode select) wires it. Four modes:
+  receiver (pink-noise filter bank shaped by the band), doppler (peak→pitch, SNR→loudness),
+  geiger (click rate ∝ SNR), drone (harmonic pad by band power). Aesthetic only — the
+  waterfall stays the quantitative view; guarded on AudioContext.
 
-Still to come in M6: spectrum audio, FPS knob, RFI-survey template.
+Still to come in M6: FPS knob, RFI-survey template.
 
 ## Skills & agents
 
