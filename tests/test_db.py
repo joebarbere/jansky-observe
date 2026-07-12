@@ -223,6 +223,54 @@ def test_migration_5_fresh_db_has_rfi_survey_1420_type(tmp_path: Path) -> None:
     assert "RFI survey @ 1420" in _type_names(engine)
 
 
+def test_migration_6_7_fresh_db_has_calibration(tmp_path: Path) -> None:
+    from jansky_observe.models import ObservationType
+
+    engine = db.init_db(tmp_path / "data")
+    assert _user_version(engine) == max(version for version, _ in db.MIGRATIONS)
+    assert "calibration_epoch" in inspect(engine).get_table_names()
+    caps = {c["name"] for c in inspect(engine).get_columns("capture")}
+    assert {"kind", "cal_epoch_id"} <= caps
+    with db.session(engine) as s:
+        names = {t.name for t in s.exec(select(ObservationType)).all()}
+    assert "Calibration sweep" in names
+
+
+def test_migration_6_7_upgrade_from_version_5_keeps_data(tmp_path: Path) -> None:
+    from jansky_observe.models import Capture, ObservationType
+
+    # Simulate a pre-M7 database with a pre-existing capture row. Only the
+    # FK-free ``kind`` column is dropped: SQLite can't DROP a column bound in a
+    # foreign key (``cal_epoch_id``), and migration 6 is guarded/idempotent for
+    # the table + FK column anyway (covered by the fresh-DB test + the re-run
+    # below). What matters here: existing rows get the default and survive.
+    engine = db.get_engine(tmp_path / "data")
+    with engine.begin() as conn:
+        for version, apply in db.MIGRATIONS[:5]:  # migrations 1..5
+            apply(conn)
+            conn.exec_driver_sql(f"PRAGMA user_version = {version}")
+        conn.exec_driver_sql("ALTER TABLE capture DROP COLUMN kind")
+        conn.exec_driver_sql("DELETE FROM observation_type WHERE name = 'Calibration sweep'")
+        conn.exec_driver_sql(
+            "INSERT INTO capture (device, path, format, size_bytes, created_at) "
+            "VALUES ('airspy', '/x/old.npz', 'npz_spectra', 123, '2026-07-01T00:00:00')"
+        )
+    assert _user_version(engine) == 5
+    assert "kind" not in {c["name"] for c in inspect(engine).get_columns("capture")}
+
+    db.migrate(engine)
+    assert _user_version(engine) == max(version for version, _ in db.MIGRATIONS)
+    assert "calibration_epoch" in inspect(engine).get_table_names()
+    with db.session(engine) as s:
+        old = s.exec(select(Capture).where(Capture.path == "/x/old.npz")).one()
+        assert old.kind == "science"  # existing row got the default
+        assert old.cal_epoch_id is None
+        assert "Calibration sweep" in {t.name for t in s.exec(select(ObservationType)).all()}
+
+    db.migrate(engine)  # re-run is a no-op
+    assert _user_version(engine) == max(version for version, _ in db.MIGRATIONS)
+
+
 def test_migration_5_seeds_the_type_into_a_version_4_db(tmp_path: Path) -> None:
     from jansky_observe.models import ChecklistTemplateItem, ObservationType
 

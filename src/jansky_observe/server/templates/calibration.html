@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}calibration — jansky-observe{% endblock %}
+{% block content %}
+<h1>Calibration</h1>
+<p class="muted">
+  A calibration epoch records that the receiver was freshly calibrated. Take a
+  <b>ref load (50&nbsp;Ω)</b>, <b>cold sky</b>, and <b>hot ground</b> capture and mark each
+  from its observation's capture list; every science capture is stamped with the epoch in
+  effect when it ran.
+</p>
+
+<section class="pane pad">
+  <h2>Start a calibration epoch</h2>
+  <form method="post" action="/calibration/epochs" class="row">
+    <input type="text" name="notes" placeholder="notes (weather, load, gain…)" size="40">
+    <button class="btn" type="submit">Start new epoch (now)</button>
+  </form>
+</section>
+
+{% if rows %}
+{% for r in rows %}
+<section class="pane pad">
+  <h2>Epoch #{{ r.epoch.id }} — {{ r.epoch.started_at | dt }}
+    {% if r.complete %}<span class="badge done">complete</span>{% else %}<span class="badge planned">partial</span>{% endif %}
+  </h2>
+  {% if r.epoch.notes %}<p class="muted">{{ r.epoch.notes }}</p>{% endif %}
+  <table class="list">
+    <tr><th>kind</th><th>captures</th></tr>
+    {% for kind in calibration_kinds %}
+    <tr>
+      <td>{{ kind }}</td>
+      <td>
+        {% set caps = r.captures.get(kind, []) %}
+        {% if caps %}{% for c in caps %}<a href="/observations/{{ c.observation_id }}">#{{ c.id }}</a>{% if not loop.last %}, {% endif %}{% endfor %}
+        {% else %}<span class="muted">—</span>{% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+</section>
+{% endfor %}
+{% else %}
+<p class="muted">No calibration epochs yet — start one above, then mark ref/cold/hot captures.</p>
+{% endif %}
+{% endblock %}

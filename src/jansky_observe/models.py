@@ -18,6 +18,9 @@ from sqlalchemy import JSON, Column
 from sqlmodel import Field, SQLModel
 
 __all__ = [
+    "CALIBRATION_KINDS",
+    "CAPTURE_KINDS",
+    "CalibrationEpoch",
     "Capture",
     "ChecklistItemState",
     "ChecklistTemplateItem",
@@ -214,6 +217,29 @@ class ChecklistItemState(SQLModel, table=True):
     checked_by: str = ""
 
 
+#: Capture measurement kinds (roadmap M7). ``science`` is the default; the rest
+#: are calibration captures grouped under a :class:`CalibrationEpoch`.
+CAPTURE_KINDS: tuple[str, ...] = ("science", "ref_load", "cold_sky", "hot_ground")
+#: The calibration kinds (everything but ``science``).
+CALIBRATION_KINDS: tuple[str, ...] = ("ref_load", "cold_sky", "hot_ground")
+
+
+class CalibrationEpoch(SQLModel, table=True):
+    """A calibration event (roadmap M7, plans 78/79): "as of ``started_at`` the
+    receiver was freshly calibrated." Groups the ref-load / cold-sky / hot-ground
+    calibration :class:`Capture` rows, and every *science* capture records which
+    epoch it falls under — plan 79's weekly cadence as a first-class object, not
+    a filename convention.
+    """
+
+    __tablename__ = "calibration_epoch"
+
+    id: int | None = Field(default=None, primary_key=True)
+    started_at: datetime = Field(default_factory=utcnow)
+    notes: str = ""
+    created_at: datetime = Field(default_factory=utcnow)
+
+
 class Capture(SQLModel, table=True):
     """A recorded data file on disk, referenced by path.
 
@@ -239,6 +265,13 @@ class Capture(SQLModel, table=True):
     #: row, its settings, and any ClassifierResult provenance survive; only the
     #: bytes are gone. ``None`` = files present. HTML-only.
     purged_at: datetime | None = None
+    #: What this capture measures (roadmap M7): ``"science"`` (default) or a
+    #: calibration kind — ``"ref_load"`` (50 Ω), ``"cold_sky"``, ``"hot_ground"``.
+    kind: str = "science"
+    #: The calibration epoch this capture belongs to (a calibration capture) or
+    #: was taken under (a science capture, stamped at registration). See
+    #: :class:`CalibrationEpoch`.
+    cal_epoch_id: int | None = Field(default=None, foreign_key="calibration_epoch.id", index=True)
     created_at: datetime = Field(default_factory=utcnow)
 
 

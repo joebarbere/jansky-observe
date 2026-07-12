@@ -124,12 +124,52 @@ def _migration_5_rfi_survey_1420_type(conn: Connection) -> None:
         session.commit()
 
 
+def _migration_6_calibration(conn: Connection) -> None:
+    """Add calibration captures (roadmap M7): the ``calibration_epoch`` table
+    and ``capture.kind`` / ``capture.cal_epoch_id``.
+
+    The ``CREATE TABLE IF NOT EXISTS`` and the ``PRAGMA table_info`` guards make
+    this a no-op on a fresh database (migration 1's ``create_all`` already built
+    the latest schema) and additive on an existing one. The DDL is frozen here
+    to match the models as of M7; later changes are new migrations.
+    """
+    conn.exec_driver_sql(
+        "CREATE TABLE IF NOT EXISTS calibration_epoch ("
+        " id INTEGER NOT NULL PRIMARY KEY,"
+        " started_at DATETIME NOT NULL,"
+        " notes VARCHAR NOT NULL DEFAULT '',"
+        " created_at DATETIME NOT NULL"
+        ")"
+    )
+    columns = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(capture)")}
+    if "kind" not in columns:
+        conn.exec_driver_sql(
+            "ALTER TABLE capture ADD COLUMN kind VARCHAR NOT NULL DEFAULT 'science'"
+        )
+    if "cal_epoch_id" not in columns:
+        conn.exec_driver_sql("ALTER TABLE capture ADD COLUMN cal_epoch_id INTEGER")
+
+
+def _migration_7_calibration_sweep_type(conn: Connection) -> None:
+    """Seed the guided "Calibration sweep" ObservationType (roadmap M7). Re-runs
+    the idempotent :func:`seeds.seed_observation_types` (inserts only types
+    missing by name) — same pattern as migration 5, and a no-op on a fresh
+    database where migration 1 already seeded it."""
+    from jansky_observe.seeds import seed_observation_types
+
+    with Session(conn) as session:
+        seed_observation_types(session)
+        session.commit()
+
+
 MIGRATIONS: list[tuple[int, Callable[[Connection], None]]] = [
     (1, _migration_1_initial_schema),
     (2, _migration_2_station_stellarium_url),
     (3, _migration_3_observation_archived_at),
     (4, _migration_4_capture_purged_at),
     (5, _migration_5_rfi_survey_1420_type),
+    (6, _migration_6_calibration),
+    (7, _migration_7_calibration_sweep_type),
 ]
 
 

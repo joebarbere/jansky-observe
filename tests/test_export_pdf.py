@@ -295,6 +295,30 @@ class TestBuildReport:
         with pytest.raises(LookupError, match="9999"):
             build_report(engine, 9999, tmp_path, TEMPLATES_DIR)
 
+    def test_report_carries_calibration_epoch_and_kind(self, tmp_path: Path) -> None:
+        """A capture stamped with a calibration epoch surfaces in the report
+        context and PDF (roadmap M7)."""
+        from jansky_observe.export.pdf import _gather_context
+        from jansky_observe.models import CalibrationEpoch, Observation
+
+        engine = init_db(tmp_path)
+        obs_id = _seeded_observation(engine, tmp_path)
+        with Session(engine) as session:
+            epoch = CalibrationEpoch(notes="ref/cold/hot done")
+            session.add(epoch)
+            session.commit()
+            session.refresh(epoch)
+            capture = session.exec(select(Capture)).one()
+            capture.kind = "cold_sky"
+            capture.cal_epoch_id = epoch.id
+            session.add(capture)
+            session.commit()
+            ctx = _gather_context(session, session.get(Observation, obs_id), tmp_path)
+        assert [e.id for e in ctx["cal_epochs"]] == [epoch.id]
+        assert ctx["captures"][0]["capture"].kind == "cold_sky"
+        out = build_report(engine, obs_id, tmp_path, TEMPLATES_DIR)
+        assert out.read_bytes().startswith(b"%PDF")
+
     def test_report_carries_vlsr_axis_figures(self, tmp_path: Path) -> None:
         """The profile figure for a pointed capture is the dual-axis variant."""
         engine = init_db(tmp_path)
