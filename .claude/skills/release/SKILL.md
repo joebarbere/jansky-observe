@@ -70,7 +70,18 @@ curl -fsSL https://github.com/joebarbere/jansky-observe/releases/latest/download
 Then on the Pi: `curl -fsS localhost:8000/healthz` and `jansky-observe --version` shows the new
 version. The milestone is closed only when the real station runs it.
 
-## 6. If the install gate fails
+## 6. Flip the docs to shipped
+
+The docs are written *during* the milestone, so they say "in progress" / "⏭ current" until
+someone flips them. That someone is this step — do it right after the Pi upgrade, as a small
+docs PR:
+
+- README.md milestone table: this release's row → `✅ done`; the next row → `⏭ next`.
+- CLAUDE.md `## Current status`: past tense for this milestone, name the next one.
+
+A release isn't finished while the README calls it current.
+
+## 7. If the install gate fails
 
 Fix the problem, **delete nothing** (no tag deletion, no force-push), bump the patch version,
 and re-tag `vX.Y.(Z+1)`. A tag whose gate failed publishes nothing by design — it's inert, not
