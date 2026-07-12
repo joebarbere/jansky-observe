@@ -6,6 +6,27 @@ milestones**). Work that landed outside a milestone gets a brief summary under t
 that shipped it. Maintained as part of `/release` — a release isn't finished until its
 section exists here.
 
+## v0.7.1 — 2026-07-12
+
+Maintenance release, no milestone — fixes the theme regression reported after v0.7.0.
+
+- **Fix a broken CSS comment that could unstyle the whole UI.** A stray `*/`
+  inside a header comment (`--wf-*/--trace-*`) closed the comment early and made
+  the parser swallow the base `:root` dark palette. It was masked in v0.7.0 by
+  the `prefers-color-scheme` fallback (which still supplied vars on a light-OS
+  machine), so a light-preferring laptop rendered a light UI and a dark-OS one
+  could render unstyled. Comment reworded; a test now asserts balanced `/* */`
+  and that the dark `:root` survives.
+- **Dark is now the default regardless of the OS preference** (the app is built
+  around a waterfall — best on black). The `prefers-color-scheme: light`
+  auto-switch is gone; light is opt-in via the cockpit-bar toggle, which is now
+  a simple **Dark ↔ Light** switch (was a confusing 3-state Auto→Light→Dark
+  where "Auto" and "Light" looked identical on a light laptop). Colored status
+  badges keep legible dark text in the light theme.
+- **`sqlite3` added to the install dependencies** so the DB under
+  `/var/lib/jansky-observe/` can be hand-inspected on the Pi (Pi OS Lite ships
+  no CLI; the app itself uses Python's `sqlite3`).
+
 ## v0.7.0 — 2026-07-12 — M6 "Station cockpit"
 
 Everything a glance at the UI should answer, plus operator-comfort. Seven pieces; none

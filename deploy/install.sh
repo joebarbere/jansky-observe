@@ -48,7 +48,9 @@ HEALTH_URL="http://127.0.0.1:8000/healthz"
 HEALTH_TIMEOUT=90             # seconds to wait for /healthz
 
 # libpango*/fonts: WeasyPrint's system dependencies (PDF reports, M4).
-APT_DEPS=(curl ca-certificates git libusb-1.0-0 airspy hackrf
+# sqlite3: the CLI for hand-inspecting /var/lib/jansky-observe/*.sqlite3 when
+# debugging on the Pi (the app uses Python's sqlite3, but Pi OS Lite ships no CLI).
+APT_DEPS=(curl ca-certificates git libusb-1.0-0 airspy hackrf sqlite3
     libpango-1.0-0 libpangoft2-1.0-0 fonts-dejavu-core)
 
 # ---------------------------------------------------------------------------
