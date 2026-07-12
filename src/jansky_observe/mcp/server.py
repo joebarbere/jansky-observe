@@ -101,6 +101,19 @@ def build_mcp(app: FastAPI) -> FastMCP:
         return await _get(app, "/api/capture/status")
 
     @mcp.tool
+    async def get_diagnostics() -> dict[str, Any]:
+        """The station diagnostics bundle for remote troubleshooting: systemd
+        unit states, SDR USB enumeration (Airspy/HackRF), capture-daemon
+        reachability + last-frame age, Pi thermals (temp + decoded throttle
+        flags), disk free with amber/red thresholds, DB schema version vs
+        expected, and recent journal errors. Every check is best-effort and
+        degrades to "unavailable" off-Pi. Call this FIRST when the waterfall is
+        flat or a session won't start — it answers every software question in
+        one shot; the physical steps (injector current, bias-tee CHECKED never
+        changed) stay in /troubleshoot-chain."""
+        return await _get(app, "/api/diagnostics")
+
+    @mcp.tool
     async def get_capture_meta(capture_id: int) -> dict[str, Any]:
         """One capture's metadata: file path, format, device, size, start/end
         times, full SDR settings, and the linked observation id (if any)."""

@@ -41,6 +41,7 @@ from jansky_observe.config import Settings, settings_from_env
 from jansky_observe.control import ctl_request
 from jansky_observe.db import init_db
 from jansky_observe.frames import SpectralFrame, decode_zmq, pack_ws
+from jansky_observe.server.diagnostics import collect_diagnostics
 from jansky_observe.server.live_badge import LiveBadge
 from jansky_observe.server.routers import catalog, gps, observations, photos, reports, wizard
 from jansky_observe.server.routers.captures import register_stopped_capture
@@ -337,6 +338,22 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             register_stopped_capture, application.state.engine, reply
         )
         return _with_disk_conveniences(reply)
+
+    @application.get("/api/diagnostics")
+    async def diagnostics() -> dict[str, Any]:
+        """The station diagnostics bundle (roadmap M6): systemd units, SDR USB
+        enumeration, daemon reachability + frame age, Pi thermals, disk, DB
+        schema version, and recent journal errors — every check best-effort.
+
+        Runs off-loop: the checks are small blocking subprocess calls.
+        """
+        return await asyncio.to_thread(
+            collect_diagnostics,
+            data_dir=settings.data_dir,
+            ctl_endpoint=settings.ctl_endpoint,
+            broadcaster=application.state.broadcaster,
+            engine=application.state.engine,
+        )
 
     @application.get("/api/live/hi_badge")
     async def live_hi_badge() -> dict[str, Any]:

@@ -111,6 +111,14 @@ jansky-research plan 78** per plan §6 — the comparison harness is built once 
 consumed here. The full plan lives in `plans/jansky_observe.md` — read it before any
 feature work.
 
+**M6 (v0.7.0 "station cockpit") is in progress** — see `plans/roadmap-post-v0.6.md`. First
+piece landed: `GET /api/diagnostics` + the `get_diagnostics` MCP tool (now **18 tools**), a
+best-effort debug bundle in `server/diagnostics.py` (systemd units → SDR USB → daemon
+reachability + frame age → Pi thermals → disk → DB schema version → journal errors), each
+check degrading to `"unavailable"` off the Pi. `/troubleshoot-chain` now calls it first. Still
+to come in M6: status bar, spectrum audio, dark mode, localization, archive/soft-delete
+(`/new-migration`), FPS knob, RFI-survey template.
+
 ## Skills & agents
 
 - `/verify` — the pre-commit gate: lint → typecheck → coverage → the end-to-end synthetic smoke.
@@ -120,8 +128,9 @@ feature work.
   classifier tests never need hardware or sky.
 - `/plan-session` — "what should I point at tonight?": whats-up + weather via the station
   MCP, ranked by the observing ladder, ending in a pre-filled draft Observation.
-- `/troubleshoot-chain` — the no-signal decision tree in strict order (injector current →
-  bias-tee states *checked never changed* → gain → USB → daemon → frequency → tinySA).
+- `/troubleshoot-chain` — the no-signal decision tree in strict order; **step 0 is the
+  `get_diagnostics` bundle** (pre-answers every software step), then injector current →
+  bias-tee states *checked never changed* → gain → USB → daemon → frequency → tinySA.
 - `/new-migration` — scaffold a forward migration: the next `(N, callable)` in
   `db.py`'s `MIGRATIONS`, the matching `models.py` change, and the round-trip test.
 - `/observing-copilot` — the during-session companion: live status + the HI badge (SNR
