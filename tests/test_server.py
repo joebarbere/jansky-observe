@@ -119,6 +119,27 @@ def test_ui_and_theme_assets_served() -> None:
     assert "prefers-color-scheme: light" in css
 
 
+def test_spectrum_audio_wired_into_live_view() -> None:
+    client = TestClient(create_app(Settings(zmq_endpoint=DEAD_ENDPOINT)))
+    body = client.get("/").text
+    assert "/static/audio.js" in body
+    assert 'id="audio-toggle"' in body
+    assert 'id="audio-mode"' in body
+    for option in ("receiver", "doppler", "geiger", "drone"):
+        assert f'value="{option}"' in body
+
+
+def test_audio_js_served_with_modes_and_frame_tap() -> None:
+    client = TestClient(create_app(Settings(zmq_endpoint=DEAD_ENDPOINT)))
+    audio = client.get("/static/audio.js")
+    assert audio.status_code == 200
+    assert "window.SpectrumAudio" in audio.text
+    for mode in ("receiver", "doppler", "geiger", "drone"):
+        assert mode in audio.text
+    # waterfall.js feeds each PSD frame to the audio engine.
+    assert "SpectrumAudio.pushFrame" in client.get("/static/waterfall.js").text
+
+
 def test_index_renders_live_page() -> None:
     client = TestClient(create_app(Settings(zmq_endpoint=DEAD_ENDPOINT)))
     resp = client.get("/")

@@ -361,7 +361,39 @@
     showOverlay(false);
     drawSpectrum();
     drawWaterfall();
+    if (window.SpectrumAudio) window.SpectrumAudio.pushFrame(frame.header, frame.power);
   }
+
+  // ---- audio sonification controls (roadmap M6) ----------------------------
+  // The synthesis lives in audio.js; here we just wire the live-view controls.
+  // Starting audio needs a user gesture, so the toggle click is what boots the
+  // AudioContext.
+  (function wireAudio() {
+    const group = document.getElementById("audio-group");
+    const toggle = document.getElementById("audio-toggle");
+    const modeSel = document.getElementById("audio-mode");
+    if (!group || !toggle || !modeSel || !window.SpectrumAudio || !window.SpectrumAudio.available) {
+      return; // no WebAudio (or controls absent) → leave the group hidden
+    }
+    group.hidden = false;
+    function setLabel(on) {
+      toggle.textContent = on ? "🔊 Audio" : "🔇 Audio";
+      toggle.setAttribute("aria-pressed", on ? "true" : "false");
+      modeSel.disabled = !on;
+    }
+    toggle.addEventListener("click", function () {
+      if (window.SpectrumAudio.isRunning()) {
+        window.SpectrumAudio.stop();
+        setLabel(false);
+      } else {
+        window.SpectrumAudio.setMode(modeSel.value);
+        setLabel(window.SpectrumAudio.start());
+      }
+    });
+    modeSel.addEventListener("change", function () {
+      window.SpectrumAudio.setMode(modeSel.value);
+    });
+  })();
 
   // ---- resize --------------------------------------------------------------
   function resizeCanvases() {
