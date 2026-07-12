@@ -1,0 +1,7 @@
+<form id="notes-form" hx-post="/observations/{{ obs.id }}/notes" hx-target="this" hx-swap="outerHTML">
+  <textarea name="notes" rows="8" placeholder="Session notes (markdown)&hellip;">{{ obs.notes }}</textarea>
+  <div class="row">
+    <button class="btn" type="submit">Save notes</button>
+    {% if saved_at %}<span class="muted">saved {{ saved_at | dt }}</span>{% endif %}
+  </div>
+</form>

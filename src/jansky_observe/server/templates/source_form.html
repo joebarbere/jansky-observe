@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}edit {{ source.name }} — jansky-observe{% endblock %}
+{% block content %}
+<h1>Edit source</h1>
+<form method="post" action="/catalog/sources/{{ source.id }}" class="grid-form pane pad">
+  <label>name <input name="name" value="{{ source.name }}" required></label>
+  <label>kind
+    <select name="kind">
+      {% for k in ["hi_region", "point_source", "sun", "custom"] %}
+      <option value="{{ k }}" {% if source.kind == k %}selected{% endif %}>{{ k }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label>RA° <input name="ra_deg" type="number" step="any" value="{{ source.ra_deg if source.ra_deg is not none else '' }}"></label>
+  <label>Dec° <input name="dec_deg" type="number" step="any" value="{{ source.dec_deg if source.dec_deg is not none else '' }}"></label>
+  <label>l° <input name="gal_l_deg" type="number" step="any" value="{{ source.gal_l_deg if source.gal_l_deg is not none else '' }}"></label>
+  <label>b° <input name="gal_b_deg" type="number" step="any" value="{{ source.gal_b_deg if source.gal_b_deg is not none else '' }}"></label>
+  <label class="wide">notes <input name="notes" value="{{ source.notes }}"></label>
+  <button class="btn" type="submit">Save</button>
+  <a class="btn" href="/catalog/sources">Cancel</a>
+</form>
+{% endblock %}

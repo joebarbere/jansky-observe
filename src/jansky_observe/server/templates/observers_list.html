@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}observers — jansky-observe{% endblock %}
+{% block content %}
+<h1>Observers</h1>
+<table class="list">
+  <tr><th>name</th><th>callsign</th><th>email</th><th>notes</th></tr>
+  {% for o in observers %}
+  <tr>
+    <td><a href="/catalog/observers/{{ o.id }}">{{ o.name }}</a></td>
+    <td>{{ o.callsign }}</td>
+    <td>{{ o.email }}</td>
+    <td class="muted">{{ o.notes }}</td>
+  </tr>
+  {% endfor %}
+</table>
+<section class="pane pad">
+  <h2>Add observer</h2>
+  <form method="post" action="/catalog/observers" class="grid-form">
+    <label>name <input name="name" required></label>
+    <label>callsign <input name="callsign"></label>
+    <label>email <input name="email" type="email"></label>
+    <label class="wide">notes <input name="notes"></label>
+    <button class="btn" type="submit">Add</button>
+  </form>
+</section>
+{% endblock %}

@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}observations — jansky-observe{% endblock %}
+{% block content %}
+<h1>Observations</h1>
+<p><a class="btn" href="/wizard">New session</a></p>
+{% if observations %}
+<table class="list">
+  <tr><th>name</th><th>status</th><th>type</th><th>source</th><th>started</th><th>ended</th></tr>
+  {% for o in observations %}
+  <tr>
+    <td><a href="/observations/{{ o.id }}">{{ o.name }}</a></td>
+    <td><span class="badge {{ o.status }}">{{ o.status }}</span></td>
+    <td>{{ types.get(o.observation_type_id, "?") }}</td>
+    <td>{{ sources.get(o.source_id, "?") }}</td>
+    <td>{{ o.actual_start | dt }}</td>
+    <td>{{ o.actual_end | dt }}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% else %}
+<p class="muted">No observations yet — start one with the session wizard.</p>
+{% endif %}
+{% endblock %}

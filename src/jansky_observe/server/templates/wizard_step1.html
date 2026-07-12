@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}new session · step 1 — jansky-observe{% endblock %}
+{% block content %}
+<h1>New session <span class="muted">— step 1 of 4</span></h1>
+<form method="post" action="/wizard/step2" class="pane pad wizard-form">
+  <label>Observation type
+    <select id="type-select" name="observation_type_id">
+      {% for t in types %}
+      <option value="{{ t.id }}" data-name="{{ default_names[t.id] }}">{{ t.name }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label>Name
+    <input id="name-input" name="name" value="{{ default_names[types[0].id] if types else '' }}">
+  </label>
+  <fieldset>
+    <legend>Observers</legend>
+    {% for o in observers %}
+    <label class="check"><input type="checkbox" name="observer_ids" value="{{ o.id }}"> {{ o.name }}</label>
+    {% else %}
+    <p class="muted">no observers yet — add one in <a href="/catalog/observers">the catalog</a></p>
+    {% endfor %}
+  </fieldset>
+  <label>Location
+    <select name="location_id">
+      {% for l in locations %}
+      <option value="{{ l.id }}" {% if l.id == default_location.id %}selected{% endif %}>{{ l.name }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <button class="btn btn-start" type="submit">Next: pick source</button>
+</form>
+<script>
+  (function () {
+    const sel = document.getElementById("type-select");
+    const name = document.getElementById("name-input");
+    let dirty = false;
+    name.addEventListener("input", () => { dirty = true; });
+    sel.addEventListener("change", () => {
+      if (!dirty) name.value = sel.selectedOptions[0].dataset.name;
+    });
+  })();
+</script>
+{% endblock %}

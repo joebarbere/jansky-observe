@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}edit {{ observer.name }} — jansky-observe{% endblock %}
+{% block content %}
+<h1>Edit observer</h1>
+<form method="post" action="/catalog/observers/{{ observer.id }}" class="grid-form pane pad">
+  <label>name <input name="name" value="{{ observer.name }}" required></label>
+  <label>callsign <input name="callsign" value="{{ observer.callsign }}"></label>
+  <label>email <input name="email" type="email" value="{{ observer.email }}"></label>
+  <label class="wide">notes <input name="notes" value="{{ observer.notes }}"></label>
+  <button class="btn" type="submit">Save</button>
+  <a class="btn" href="/catalog/observers">Cancel</a>
+</form>
+{% endblock %}

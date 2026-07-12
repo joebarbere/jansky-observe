@@ -1,0 +1,38 @@
+<div id="pointing-info" class="pane pad">
+  <h3>{{ source.name }}</h3>
+  {% if not pointing.is_up %}<p class="warn-text">below the horizon right now</p>{% endif %}
+  <table class="kv">
+    <tr><th>dial az / el</th>
+        <td><b>{{ "%.1f"|format(pointing.az_deg) }}° / {{ "%.1f"|format(pointing.el_deg) }}°</b>
+            <span class="muted">(offsets {{ "%+.2f"|format(pointing.offset_az_deg) }}° / {{ "%+.2f"|format(pointing.offset_el_deg) }}° applied)</span></td></tr>
+    <tr><th>raw az / el</th><td>{{ "%.1f"|format(pointing.raw_az_deg) }}° / {{ "%.1f"|format(pointing.raw_el_deg) }}°</td></tr>
+    <tr><th>drift</th><td>{{ "%+.3f"|format(pointing.drift_az_deg_per_min) }}°/min az · {{ "%+.3f"|format(pointing.drift_el_deg_per_min) }}°/min el</td></tr>
+    <tr><th>transit</th><td>{{ pointing.transit_utc[:16] }}Z at {{ "%.1f"|format(pointing.transit_el_deg) }}°</td></tr>
+    <tr><th>beam crossing</th>
+        <td>{% if pointing.beam_crossing_min %}{{ "%.0f"|format(pointing.beam_crossing_min) }} min{% else %}&mdash;{% endif %}
+            <span class="muted">(HPBW {{ "%.1f"|format(pointing.hpbw_deg) }}°)</span></td></tr>
+    <tr><th>rise / set</th>
+        <td>{% if pointing.always_up %}always up{% elif pointing.never_up %}never up{% else %}
+            {{ pointing.rise_utc[:16] ~ "Z" if pointing.rise_utc else "—" }} / {{ pointing.set_utc[:16] ~ "Z" if pointing.set_utc else "—" }}{% endif %}</td></tr>
+  </table>
+  <h4>Weather</h4>
+  {% if weather %}
+  <table class="kv">
+    <tr><th>now</th>
+        <td>{{ weather.now.temp_c if weather.now.temp_c is not none else "—" }} °C ·
+            wind {{ weather.now.wind_speed_ms if weather.now.wind_speed_ms is not none else "—" }} m/s ·
+            sky {{ weather.now.sky_cover_pct if weather.now.sky_cover_pct is not none else "—" }} % ·
+            {{ weather.now.summary or "" }}</td></tr>
+    {% for h in weather.hourly %}
+    <tr><th>+{{ loop.index }} h</th>
+        <td>{{ h.temp_c if h.temp_c is not none else "—" }} °C ·
+            wind {{ h.wind_speed_ms if h.wind_speed_ms is not none else "—" }} m/s ·
+            precip {{ h.precip_prob_pct if h.precip_prob_pct is not none else "—" }} % ·
+            {{ h.summary or "" }}</td></tr>
+    {% endfor %}
+    <tr><th>provider</th><td class="muted">{{ weather.provider }}</td></tr>
+  </table>
+  {% else %}
+  <p class="muted">weather unavailable</p>
+  {% endif %}
+</div>

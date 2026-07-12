@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}locations — jansky-observe{% endblock %}
+{% block content %}
+<h1>Locations</h1>
+<table class="list">
+  <tr><th>name</th><th>lat°</th><th>lon°</th><th>elev m</th><th>address</th><th>default</th></tr>
+  {% for l in locations %}
+  <tr>
+    <td><a href="/catalog/locations/{{ l.id }}">{{ l.name }}</a></td>
+    <td>{{ "%.3f"|format(l.lat_deg) }}</td>
+    <td>{{ "%.3f"|format(l.lon_deg) }}</td>
+    <td>{{ "%.0f"|format(l.elevation_m) }}</td>
+    <td class="muted">{{ l.address }}</td>
+    <td>{{ "✓" if l.is_default else "" }}</td>
+  </tr>
+  {% endfor %}
+</table>
+<section class="pane pad">
+  <h2>Add location</h2>
+  <form method="post" action="/catalog/locations" class="grid-form">
+    <label>name <input name="name" required></label>
+    <label>lat° <input name="lat_deg" type="number" step="any" required></label>
+    <label>lon° <input name="lon_deg" type="number" step="any" required></label>
+    <label>elev m <input name="elevation_m" type="number" step="any" value="0"></label>
+    <label class="wide">address <input name="address"></label>
+    <button class="btn" type="submit">Add</button>
+  </form>
+</section>
+{% endblock %}

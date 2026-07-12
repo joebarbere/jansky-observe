@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}observation types — jansky-observe{% endblock %}
+{% block content %}
+<h1>Observation types</h1>
+<p class="muted">Checklist templates are seeded from the plan (§5.4) and shown read-only.</p>
+{% for t in types %}
+<section class="pane pad">
+  <h2>{{ t.name }}</h2>
+  <p class="muted">{{ t.description }}</p>
+  {% if t.default_sdr_settings %}
+  <p class="sdr">default SDR:
+    {% for k, v in t.default_sdr_settings.items() %}<code>{{ k }}={{ v }}</code> {% endfor %}
+  </p>
+  {% endif %}
+  {% if checklists[t.id] %}
+  <ol class="template-checklist">
+    {% for item in checklists[t.id] %}
+    <li>{{ item.text }} <span class="{{ 'req' if item.required else 'rec' }}">{{ 'required' if item.required else 'recommended' }}</span></li>
+    {% endfor %}
+  </ol>
+  {% else %}
+  <p class="muted">no checklist</p>
+  {% endif %}
+</section>
+{% endfor %}
+{% endblock %}

@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}edit {{ location.name }} — jansky-observe{% endblock %}
+{% block content %}
+<h1>Edit location</h1>
+<form method="post" action="/catalog/locations/{{ location.id }}" class="grid-form pane pad">
+  <label>name <input name="name" value="{{ location.name }}" required></label>
+  <label>lat° <input name="lat_deg" type="number" step="any" value="{{ location.lat_deg }}" required></label>
+  <label>lon° <input name="lon_deg" type="number" step="any" value="{{ location.lon_deg }}" required></label>
+  <label>elev m <input name="elevation_m" type="number" step="any" value="{{ location.elevation_m }}"></label>
+  <label class="wide">address <input name="address" value="{{ location.address }}"></label>
+  <button class="btn" type="submit">Save</button>
+  <a class="btn" href="/catalog/locations">Cancel</a>
+</form>
+{% endblock %}

@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% block title %}{{ obs.name }} — jansky-observe{% endblock %}
+{% block content %}
+<h1>{{ obs.name }} <span class="badge {{ obs.status }}">{{ obs.status }}</span></h1>
+
+<div class="row actions">
+  {% if obs.status == "planned" %}
+  <a class="btn" href="/wizard/{{ obs.id }}/step3">Resume wizard</a>
+  <form method="post" action="/observations/{{ obs.id }}/abort"><button class="btn btn-stop" type="submit">Abort</button></form>
+  {% elif obs.status == "running" %}
+  <form method="post" action="/observations/{{ obs.id }}/stop"><button class="btn btn-stop" type="submit">Stop observation</button></form>
+  <form method="post" action="/observations/{{ obs.id }}/abort"><button class="btn btn-stop" type="submit">Abort</button></form>
+  {% endif %}
+</div>
+
+{% if stopped %}
+<div class="pane pad notice">Observation stopped — work the teardown, then record teardown notes below.</div>
+{% endif %}
+
+{% if is_sun_cal and obs.status == "done" %}
+<section class="pane pad suncal">
+  <h2>Sun-cal pointing offsets (plan §5.4)</h2>
+  <p>Δaz/Δel = scale/gauge reading minus predicted, at the RF peak.
+     Current station offsets: <b>az {{ "%+.2f"|format(station.pointing_offset_az_deg) }}°</b> ·
+     <b>el {{ "%+.2f"|format(station.pointing_offset_el_deg) }}°</b></p>
+  <form method="post" action="/observations/{{ obs.id }}/suncal" class="row">
+    <label>Δaz° <input type="number" step="0.01" name="offset_az_deg" value="{{ station.pointing_offset_az_deg }}"></label>
+    <label>Δel° <input type="number" step="0.01" name="offset_el_deg" value="{{ station.pointing_offset_el_deg }}"></label>
+    <button class="btn" type="submit">Write offsets to station</button>
+  </form>
+</section>
+{% endif %}
+
+<section class="pane pad">
+  <h2>Metadata</h2>
+  <table class="kv">
+    <tr><th>type</th><td>{{ obs_type.name }}</td></tr>
+    <tr><th>source</th><td>{{ source.name }} ({{ source.kind }})</td></tr>
+    <tr><th>location</th><td>{{ location.name }} ({{ "%.3f"|format(location.lat_deg) }}, {{ "%.3f"|format(location.lon_deg) }})</td></tr>
+    <tr><th>observers</th><td>{% for o in observers %}{{ o.name }}{% if not loop.last %}, {% endif %}{% else %}—{% endfor %}</td></tr>
+    <tr><th>started</th><td>{{ obs.actual_start | dt }}</td></tr>
+    <tr><th>ended</th><td>{{ obs.actual_end | dt }}</td></tr>
+    <tr><th>created</th><td>{{ obs.created_at | dt }}</td></tr>
+  </table>
+</section>
+
+<section class="pane pad">
+  <h2>Pointing</h2>
+  <table class="kv">
+    <tr><th>dialed az / el</th><td>{% if obs.pointing_az_deg is not none %}<b>{{ "%.1f"|format(obs.pointing_az_deg) }}° / {{ "%.1f"|format(obs.pointing_el_deg) }}°</b>{% else %}—{% endif %}</td></tr>
+    <tr><th>computed az / el at start</th><td>{% if obs.computed_az_deg is not none %}{{ "%.1f"|format(obs.computed_az_deg) }}° / {{ "%.1f"|format(obs.computed_el_deg) }}°{% else %}—{% endif %}</td></tr>
+    <tr><th>station offsets</th><td>az {{ "%+.2f"|format(station.pointing_offset_az_deg) }}° · el {{ "%+.2f"|format(station.pointing_offset_el_deg) }}°</td></tr>
+  </table>
+</section>
+
+<section class="pane pad">
+  <h2>Weather at start</h2>
+  {% if obs.weather_snapshot %}
+  {% set now = obs.weather_snapshot.now %}
+  <table class="kv">
+    <tr><th>provider</th><td>{{ obs.weather_snapshot.provider }}</td></tr>
+    <tr><th>temp</th><td>{{ now.temp_c if now.temp_c is not none else "—" }} °C</td></tr>
+    <tr><th>wind</th><td>{{ now.wind_speed_ms if now.wind_speed_ms is not none else "—" }} m/s</td></tr>
+    <tr><th>sky cover</th><td>{{ now.sky_cover_pct if now.sky_cover_pct is not none else "—" }} %</td></tr>
+    <tr><th>humidity</th><td>{{ now.humidity_pct if now.humidity_pct is not none else "—" }} %</td></tr>
+    <tr><th>summary</th><td>{{ now.summary or "—" }}</td></tr>
+  </table>
+  {% else %}
+  <p class="muted">weather unavailable</p>
+  {% endif %}
+</section>
+
+<section class="pane pad">
+  <h2>Checklist</h2>
+  {% if checklist %}
+  <p class="row"><label for="who">tick as</label>
+    <select id="who" name="by">
+      {% for o in observers %}<option value="{{ o.name }}">{{ o.name }}</option>{% endfor %}
+      <option value="claude">claude</option>
+    </select>
+  </p>
+  {% set view = "detail" %}
+  {% include "_checklist.html" %}
+  {% else %}
+  <p class="muted">this observation type has no checklist</p>
+  {% endif %}
+</section>
+
+<section class="pane pad">
+  <h2>Notes{% if stopped %} <span class="muted">(teardown)</span>{% endif %}</h2>
+  {% include "_notes.html" %}
+</section>
+
+<section class="pane pad">
+  <h2>Captures</h2>
+  {% if captures %}
+  <table class="list">
+    <tr><th>device</th><th>format</th><th>file</th><th>size</th><th>start</th><th>end</th></tr>
+    {% for c in captures %}
+    <tr>
+      <td>{{ c.device }}</td><td>{{ c.format }}</td><td>{{ c.path }}</td>
+      <td>{{ "%.1f"|format(c.size_bytes / 1e6) }} MB</td>
+      <td>{{ c.start | dt }}</td><td>{{ c.end | dt }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% else %}
+  <p class="muted">no captures associated yet</p>
+  {% endif %}
+</section>
+{% endblock %}

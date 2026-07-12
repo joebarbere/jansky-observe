@@ -161,8 +161,9 @@ def _receive_bytes_with_timeout(ws, timeout: float) -> bytes:
         executor.shutdown(wait=False)
 
 
-def test_ws_sends_latest_frame_immediately_on_connect() -> None:
-    app = create_app(Settings(zmq_endpoint=DEAD_ENDPOINT))
+def test_ws_sends_latest_frame_immediately_on_connect(tmp_path) -> None:
+    # Entering the lifespan runs init_db (migrate-on-start), so point data_dir at tmp.
+    app = create_app(Settings(zmq_endpoint=DEAD_ENDPOINT, data_dir=str(tmp_path)))
     frame = _frame(seq=42)
     with TestClient(app) as client:
         # No clients registered yet: publish just records the latest frame.
@@ -174,7 +175,7 @@ def test_ws_sends_latest_frame_immediately_on_connect() -> None:
     np.testing.assert_array_equal(payload, frame.power_db)
 
 
-def test_ws_end_to_end_from_zmq_publisher() -> None:
+def test_ws_end_to_end_from_zmq_publisher(tmp_path) -> None:
     ctx = zmq.Context()
     pub = ctx.socket(zmq.PUB)
     pub.bind("tcp://127.0.0.1:*")
@@ -191,7 +192,7 @@ def test_ws_end_to_end_from_zmq_publisher() -> None:
 
     pumper = threading.Thread(target=pump, daemon=True)
     try:
-        app = create_app(Settings(zmq_endpoint=endpoint))
+        app = create_app(Settings(zmq_endpoint=endpoint, data_dir=str(tmp_path)))
         with TestClient(app) as client, client.websocket_connect("/ws/live") as ws:
             pumper.start()
             data = _receive_bytes_with_timeout(ws, timeout=15.0)
@@ -212,10 +213,11 @@ def test_ws_end_to_end_from_zmq_publisher() -> None:
     np.testing.assert_array_equal(payload, frame.power_db)
 
 
-def test_lifespan_starts_and_stops_relay_task_cleanly() -> None:
-    app = create_app(Settings(zmq_endpoint=DEAD_ENDPOINT))
+def test_lifespan_starts_and_stops_relay_task_cleanly(tmp_path) -> None:
+    app = create_app(Settings(zmq_endpoint=DEAD_ENDPOINT, data_dir=str(tmp_path)))
     with TestClient(app):
         assert not app.state.relay_task.done()
+        assert app.state.engine is not None  # init_db ran (migrate-on-start)
     assert app.state.relay_task.done()
 
 
