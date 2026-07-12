@@ -3,8 +3,13 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
+import threading
+from collections.abc import Callable, Iterator
+from typing import Any
 
+import zmq
 from fastmcp import Client
 from jansky.signals import rng
 from sqlmodel import Session
@@ -91,6 +96,7 @@ def test_tool_surface_has_no_forbidden_verbs(tmp_path):
         "list_observations",
         "reset_hi_badge",
         "run_classifier",
+        "start_rfi_sweep",
         "tick_checklist_item",
         "whats_up",
     ]
@@ -201,6 +207,77 @@ def test_capture_and_classifier_round_trip(tmp_path):
             assert result["params"]["window_source"] == "fixed"
 
     asyncio.run(scenario())
+
+
+@contextlib.contextmanager
+def _fake_daemon(handler: Callable[[dict[str, Any]], dict[str, Any]]) -> Iterator[str]:
+    """A plain ZMQ REP control socket (pattern from test_captures_api.py)."""
+    ctx = zmq.Context()
+    sock = ctx.socket(zmq.REP)
+    sock.bind("tcp://127.0.0.1:*")
+    endpoint = sock.getsockopt_string(zmq.LAST_ENDPOINT)
+    stop = threading.Event()
+
+    def serve() -> None:
+        while not stop.is_set():
+            if sock.poll(50, zmq.POLLIN):
+                request = json.loads(sock.recv())
+                sock.send(json.dumps(handler(request)).encode())
+
+    thread = threading.Thread(target=serve, daemon=True)
+    thread.start()
+    try:
+        yield endpoint
+    finally:
+        stop.set()
+        thread.join(timeout=2.0)
+        sock.close(0)
+        ctx.term()
+
+
+def test_start_rfi_sweep_round_trip(tmp_path):
+    """start_rfi_sweep proxies /api/rfi_sweep: daemon reply + registered capture id."""
+    engine = init_db(tmp_path)
+    csv_path = tmp_path / "captures" / "rfi-20260101-000000Z.csv"
+    csv_path.parent.mkdir(parents=True)
+    csv_path.write_text(
+        "2026-01-01, 00:00:00.000000, 1000000000, 1005000000, 1000000.00, 20, -38.00\n"
+    )
+    canned = {
+        "ok": True,
+        "path": str(csv_path),
+        "num_sweeps": 20,
+        "n_rows": 40,
+        "freq_range_hz": [1.0e9, 2.0e9],
+        "loudest": [{"freq_hz": 1.176e9, "power_db": -38.0}],
+    }
+    received: list[dict[str, Any]] = []
+
+    def handler(request: dict[str, Any]) -> dict[str, Any]:
+        received.append(request)
+        return canned
+
+    with _fake_daemon(handler) as endpoint:
+        app = create_app(Settings(data_dir=str(tmp_path), ctl_endpoint=endpoint), engine=engine)
+        mcp = build_mcp(app)
+
+        async def scenario():
+            async with Client(mcp) as client:
+                return _payload(
+                    await client.call_tool(
+                        "start_rfi_sweep", {"freq_lo_mhz": 1000, "freq_hi_mhz": 2000}
+                    )
+                )
+
+        body = asyncio.run(scenario())
+    assert received == [{"cmd": "rfi_sweep", "freq_lo_mhz": 1000.0, "freq_hi_mhz": 2000.0}]
+    assert body["loudest"][0]["power_db"] == -38.0
+    capture_id = body["capture_id"]
+    with Session(app.state.engine) as session:
+        capture = session.get(Capture, capture_id)
+        assert capture is not None
+        assert capture.device == "hackrf" and capture.format == "hackrf_sweep_csv"
+        assert capture.path == str(csv_path)
 
 
 def test_hi_badge_tools(tmp_path):

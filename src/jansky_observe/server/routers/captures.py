@@ -11,11 +11,14 @@ captures table.
 
 Registration of a capture the daemon just stopped lives here too
 (:func:`register_stopped_capture`) — ``server/app.py`` calls it from the
-``/api/capture/stop`` handler.
+``/api/capture/stop`` handler. ``POST /api/rfi_sweep`` (plan §4.2/§5.2)
+proxies the daemon's blocking HackRF sweep command and registers the CSV
+via :func:`register_rfi_sweep_capture`.
 """
 
 from __future__ import annotations
 
+import asyncio
 import json
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -25,6 +28,7 @@ import numpy as np
 from astropy.coordinates import SkyCoord
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse
+from pydantic import BaseModel
 from sqlalchemy import Engine
 from sqlmodel import Session, col, select
 
@@ -35,6 +39,7 @@ from jansky_observe.confirm.classifier import (
     classify_capture_npz,
 )
 from jansky_observe.confirm.plots import verdict_plot
+from jansky_observe.control import ctl_request
 from jansky_observe.models import (
     Capture,
     ClassifierResult,
@@ -46,12 +51,25 @@ from jansky_observe.models import (
 from jansky_observe.server.live_badge import source_coord
 from jansky_observe.server.routers import TEMPLATES, SessionDep, get_or_404
 
-__all__ = ["parse_capture_settings", "register_stopped_capture", "router"]
+__all__ = [
+    "parse_capture_settings",
+    "register_rfi_sweep_capture",
+    "register_stopped_capture",
+    "router",
+]
 
 router = APIRouter(tags=["captures"])
 
 _STATUS_FORMATS = {"npz": "npz_spectra", "sigmf": "sigmf"}
 """Daemon capture format → Capture.format value."""
+
+# Same client-side-failure markers as server/app.py's _ctl closure: ctl_request
+# never raises, so these substrings mean "daemon unreachable" → 503; any other
+# ok=false reply is the daemon refusing the command → 409.
+_UNREACHABLE_MARKERS = ("did not reply", "control channel error", "malformed reply")
+_SWEEP_CTL_TIMEOUT_MS = 90_000
+"""The rfi_sweep command blocks the daemon for the sweep's duration (seconds,
+bounded by hackrf_sweep.SWEEP_TIMEOUT_S) — far past control.CTL_TIMEOUT_MS."""
 
 
 # ---- registration (shared with the /api/capture/stop handler) --------------------
@@ -126,6 +144,81 @@ def register_stopped_capture(engine: Engine | None, status: dict[str, Any]) -> i
         session.commit()
         session.refresh(capture)
         return capture.id
+
+
+# ---- RFI sweep (plan §4.2 survey mode, §5.2 button, §12.4 safe verb) ----------------
+
+
+class RfiSweepBody(BaseModel):
+    """Optional request body for ``POST /api/rfi_sweep``."""
+
+    freq_lo_mhz: float = 1000
+    freq_hi_mhz: float = 2000
+
+
+def register_rfi_sweep_capture(engine: Engine | None, reply: dict[str, Any]) -> int | None:
+    """Create a :class:`Capture` row for a finished RFI sweep.
+
+    ``reply`` is the daemon's ``rfi_sweep`` success reply (path + summary).
+    The raw CSV is the capture; the summary numbers ride along in
+    ``sdr_settings`` for provenance. ``None`` when there is no engine (tests
+    without a lifespan) or no path.
+    """
+    path = reply.get("path")
+    if engine is None or not path:
+        return None
+    csv_path = Path(str(path))
+    with Session(engine) as session:
+        capture = Capture(
+            observation_id=_running_observation_id(session),
+            device="hackrf",
+            path=str(path),
+            format="hackrf_sweep_csv",
+            size_bytes=csv_path.stat().st_size if csv_path.exists() else 0,
+            end=utcnow(),
+            sdr_settings={
+                "freq_range_hz": reply.get("freq_range_hz"),
+                "num_sweeps": reply.get("num_sweeps"),
+                "n_rows": reply.get("n_rows"),
+            },
+        )
+        session.add(capture)
+        session.commit()
+        session.refresh(capture)
+        return capture.id
+
+
+@router.post("/api/rfi_sweep")
+async def api_rfi_sweep(request: Request, body: RfiSweepBody | None = None) -> dict[str, Any]:
+    """Run a HackRF RFI survey sweep and register the CSV as a capture.
+
+    Proxies the daemon's ``rfi_sweep`` control command (blocking — the live
+    frame stream pauses for the sweep's duration; 409 while a capture is
+    running, 503 when the daemon is unreachable), then registers the CSV as a
+    :class:`Capture` (device ``hackrf``, format ``hackrf_sweep_csv``, linked
+    to the running observation if any). Returns the daemon reply plus
+    ``capture_id``.
+    """
+    params = body or RfiSweepBody()
+    command = {
+        "cmd": "rfi_sweep",
+        "freq_lo_mhz": params.freq_lo_mhz,
+        "freq_hi_mhz": params.freq_hi_mhz,
+    }
+    reply = await asyncio.to_thread(
+        ctl_request,
+        request.app.state.settings.ctl_endpoint,
+        command,
+        timeout_ms=_SWEEP_CTL_TIMEOUT_MS,
+    )
+    if not reply.get("ok"):
+        error = str(reply.get("error", "unknown control error"))
+        status = 503 if any(marker in error for marker in _UNREACHABLE_MARKERS) else 409
+        raise HTTPException(status_code=status, detail=error)
+    reply["capture_id"] = await asyncio.to_thread(
+        register_rfi_sweep_capture, request.app.state.engine, reply
+    )
+    return reply
 
 
 # ---- shared helpers ----------------------------------------------------------------

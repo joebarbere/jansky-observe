@@ -14,17 +14,20 @@ Adding a migration (what the ``/new-migration`` skill scaffolds)
 Migration 1 creates the full current schema, so later migrations are plain
 DDL callables appended to :data:`MIGRATIONS`::
 
-    def _migration_2_station_backlash(conn: Connection) -> None:
+    def _migration_3_station_backlash(conn: Connection) -> None:
         \"\"\"Add the azimuth-backlash column to station.\"\"\"
         conn.exec_driver_sql(
             "ALTER TABLE station ADD COLUMN backlash_az_deg FLOAT NOT NULL DEFAULT 0.0"
         )
 
-    MIGRATIONS.append((2, _migration_2_station_backlash))
+    MIGRATIONS.append((3, _migration_3_station_backlash))
 
 Remember to also add the new field to the SQLModel class in ``models.py`` —
 ``create_all`` in migration 1 always builds the *latest* schema for fresh
-databases, and both paths must agree.
+databases, and both paths must agree. Because migration 1 builds the latest
+schema, a later ALTER TABLE that adds a column present in the latest models
+must guard on ``PRAGMA table_info`` (see migration 2): on a fresh database
+the column already exists when the migration runs.
 """
 
 from __future__ import annotations
@@ -68,8 +71,23 @@ def _migration_1_initial_schema(conn: Connection) -> None:
         seed_all(s)
 
 
+def _migration_2_station_stellarium_url(conn: Connection) -> None:
+    """Add ``station.stellarium_url`` — the desktop Stellarium RemoteControl
+    base URL for the M5 finder-view integration (plan §4.3).
+
+    Nullable, no default: ``NULL`` means "no Stellarium configured". Guarded
+    on ``PRAGMA table_info`` because migration 1 builds the *latest* schema —
+    on a fresh database the column already exists when this runs, and both
+    paths must land on the identical schema.
+    """
+    columns = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(station)")}
+    if "stellarium_url" not in columns:
+        conn.exec_driver_sql("ALTER TABLE station ADD COLUMN stellarium_url VARCHAR")
+
+
 MIGRATIONS: list[tuple[int, Callable[[Connection], None]]] = [
     (1, _migration_1_initial_schema),
+    (2, _migration_2_station_stellarium_url),
 ]
 
 

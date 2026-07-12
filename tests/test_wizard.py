@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import Engine
 from sqlmodel import Session, select
 
+from jansky_observe.astro.stellarium import StellariumUnavailable
 from jansky_observe.config import Settings
 from jansky_observe.db import init_db
 from jansky_observe.models import Observation, ObservationType, RadioSource, Station
@@ -155,6 +156,157 @@ def test_pointing_fragment_degrades_when_weather_fails(
     resp = client.get("/wizard/pointing", params={"source_id": source_id, "location_id": 1})
     assert resp.status_code == 200
     assert "weather unavailable" in resp.text
+
+
+# ---- the Stellarium block (plan §4.3): finder slew + az/el cross-check --------------
+
+
+def _set_stellarium_url(engine: Engine, url: str | None = "http://desktop:8090") -> None:
+    with Session(engine) as session:
+        station = session.exec(select(Station)).one()
+        station.stellarium_url = url
+        session.add(station)
+        session.commit()
+
+
+def _install_fake_stellarium(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    find: bool = True,
+    info: dict[str, Any] | None = None,
+    fail: bool = False,
+) -> dict[str, Any]:
+    """Replace the wizard's StellariumClient with a canned, call-recording fake."""
+    calls: dict[str, Any] = {"base_url": None, "focus": None, "slew": None}
+
+    class FakeStellarium:
+        def __init__(self, base_url: str, client: Any = None) -> None:
+            calls["base_url"] = base_url
+
+        def find_object(self, name: str) -> dict[str, Any] | None:
+            if fail:
+                raise StellariumUnavailable("Stellarium unreachable at http://desktop:8090")
+            return {"name": name, "matches": [name]} if find else None
+
+        def focus(self, target: str) -> bool:
+            calls["focus"] = target
+            return True
+
+        def object_info(self, name: str) -> dict[str, Any]:
+            return dict(info or {})
+
+        def slew_view(self, az_deg: float, alt_deg: float) -> None:
+            calls["slew"] = (az_deg, alt_deg)
+
+    monkeypatch.setattr("jansky_observe.server.routers.wizard.StellariumClient", FakeStellarium)
+    return calls
+
+
+def test_pointing_fragment_without_stellarium_url_has_no_button(
+    client: TestClient, engine: Engine
+) -> None:
+    source_id = _id_of(engine, RadioSource, "Cyg A")
+    body = client.get("/wizard/pointing", params={"source_id": source_id, "location_id": 1}).text
+    assert "Show in Stellarium" not in body
+
+
+def test_pointing_fragment_with_stellarium_url_offers_button(
+    client: TestClient, engine: Engine
+) -> None:
+    _set_stellarium_url(engine)
+    source_id = _id_of(engine, RadioSource, "Cyg A")
+    body = client.get("/wizard/pointing", params={"source_id": source_id, "location_id": 1}).text
+    assert "Show in Stellarium" in body
+    assert 'hx-post="/wizard/stellarium/show"' in body
+
+
+def test_stellarium_show_without_url_is_409(client: TestClient, engine: Engine) -> None:
+    source_id = _id_of(engine, RadioSource, "Cyg A")
+    resp = client.post("/wizard/stellarium/show", data={"source_id": source_id, "location_id": 1})
+    assert resp.status_code == 409
+
+
+def test_stellarium_show_focuses_and_reports_agreement(
+    client: TestClient, engine: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Focused by name; Stellarium's reported az/alt ≈ astropy's → 'agrees within 0.3°'."""
+    _set_stellarium_url(engine)
+    source_id = _id_of(engine, RadioSource, "Cyg A")
+    pointing = client.get(f"/api/pointing/{source_id}").json()
+    calls = _install_fake_stellarium(
+        monkeypatch,
+        info={"azimuth": pointing["raw_az_deg"], "altitude": pointing["raw_el_deg"]},
+    )
+    resp = client.post("/wizard/stellarium/show", data={"source_id": source_id, "location_id": 1})
+    assert resp.status_code == 200
+    assert "Stellarium focused on" in resp.text
+    assert "agrees within 0.3°" in resp.text
+    assert calls["base_url"] == "http://desktop:8090"
+    assert calls["focus"] == "Cyg A"
+    assert calls["slew"] is None  # focus path — no raw view slew
+
+
+def test_stellarium_show_warns_on_big_delta(
+    client: TestClient, engine: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A >1° disagreement renders a warning — astropy stays authoritative."""
+    _set_stellarium_url(engine)
+    source_id = _id_of(engine, RadioSource, "Cyg A")
+    pointing = client.get(f"/api/pointing/{source_id}").json()
+    _install_fake_stellarium(
+        monkeypatch,
+        info={"azimuth": pointing["raw_az_deg"], "altitude": pointing["raw_el_deg"] + 5.0},
+    )
+    body = client.post(
+        "/wizard/stellarium/show", data={"source_id": source_id, "location_id": 1}
+    ).text
+    assert "Stellarium differs by 5.0°" in body
+    assert "trust astropy" in body
+    assert "warn-text" in body
+
+
+def test_stellarium_show_falls_back_to_view_slew_when_find_fails(
+    client: TestClient, engine: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Pseudo-sources (the HI regions) aren't in Stellarium — slew to computed az/el."""
+    _set_stellarium_url(engine)
+    source_id = _id_of(engine, RadioSource, "Cygnus region HI")
+    pointing = client.get(f"/api/pointing/{source_id}").json()
+    calls = _install_fake_stellarium(monkeypatch, find=False)
+    body = client.post(
+        "/wizard/stellarium/show", data={"source_id": source_id, "location_id": 1}
+    ).text
+    assert "view slewed to az" in body
+    assert calls["focus"] is None
+    az_deg, el_deg = calls["slew"]
+    # the fragment recomputes "now" a moment after /api/pointing — allow drift slack
+    assert az_deg == pytest.approx(pointing["raw_az_deg"], abs=0.1)
+    assert el_deg == pytest.approx(pointing["raw_el_deg"], abs=0.1)
+
+
+def test_stellarium_show_degrades_when_info_lacks_altaz(
+    client: TestClient, engine: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _set_stellarium_url(engine)
+    source_id = _id_of(engine, RadioSource, "Cyg A")
+    _install_fake_stellarium(monkeypatch, info={})
+    body = client.post(
+        "/wizard/stellarium/show", data={"source_id": source_id, "location_id": 1}
+    ).text
+    assert "no az/alt reported back" in body
+
+
+def test_stellarium_show_unavailable_renders_inline_error(
+    client: TestClient, engine: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A dead Stellarium is a friendly inline message, never an error page."""
+    _set_stellarium_url(engine)
+    source_id = _id_of(engine, RadioSource, "Cyg A")
+    _install_fake_stellarium(monkeypatch, fail=True)
+    resp = client.post("/wizard/stellarium/show", data={"source_id": source_id, "location_id": 1})
+    assert resp.status_code == 200
+    assert "Stellarium unreachable" in resp.text
+    assert "the wizard works fine without it" in resp.text
 
 
 # ---- the end-to-end session ------------------------------------------------------

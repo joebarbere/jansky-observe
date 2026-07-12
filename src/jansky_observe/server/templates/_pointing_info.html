@@ -35,4 +35,12 @@
   {% else %}
   <p class="muted">weather unavailable</p>
   {% endif %}
+  {% if stellarium_url %}
+  <h4>Stellarium</h4>
+  <button class="btn btn-small" type="button"
+          hx-post="/wizard/stellarium/show"
+          hx-vals='{"source_id": {{ source.id }}, "location_id": {{ location_id }}}'
+          hx-target="#stellarium-result" hx-swap="outerHTML">Show in Stellarium</button>
+  <div id="stellarium-result"></div>
+  {% endif %}
 </div>

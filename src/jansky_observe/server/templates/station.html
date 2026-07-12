@@ -26,6 +26,18 @@
 </section>
 
 <section class="pane pad">
+  <h2>Stellarium (plan §4.3)</h2>
+  <p class="muted">RemoteControl URL of the desktop Stellarium — the wizard uses it for a finder
+    view and an az/el sanity check; astropy stays authoritative. Leave empty to disable.</p>
+  <form method="post" action="/station/stellarium" class="row">
+    <label>URL <input type="text" name="stellarium_url" size="30"
+                      value="{{ station.stellarium_url or '' }}"
+                      placeholder="http://desktop:8090"></label>
+    <button class="btn" type="submit">Save Stellarium URL</button>
+  </form>
+</section>
+
+<section class="pane pad">
   <h2>RF chain</h2>
   <ol class="rf-chain">
     {% for component in station.rf_chain %}<li>{{ component }}</li>{% endfor %}

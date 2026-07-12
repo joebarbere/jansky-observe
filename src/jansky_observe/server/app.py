@@ -42,7 +42,7 @@ from jansky_observe.control import ctl_request
 from jansky_observe.db import init_db
 from jansky_observe.frames import SpectralFrame, decode_zmq, pack_ws
 from jansky_observe.server.live_badge import LiveBadge
-from jansky_observe.server.routers import catalog, observations, photos, reports, wizard
+from jansky_observe.server.routers import catalog, gps, observations, photos, reports, wizard
 from jansky_observe.server.routers.captures import register_stopped_capture
 from jansky_observe.server.routers.captures import router as captures_router
 
@@ -271,6 +271,8 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
     application.state.engine = engine
     application.mount("/static", StaticFiles(directory=str(_PACKAGE_DIR / "static")), name="static")
     application.include_router(observations.router)
+    # gps before catalog: /catalog/locations/from-gps must beat /catalog/locations/{id}.
+    application.include_router(gps.router)
     application.include_router(catalog.router)
     application.include_router(wizard.router)
     application.include_router(captures_router)

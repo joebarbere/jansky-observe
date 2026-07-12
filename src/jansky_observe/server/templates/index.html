@@ -32,9 +32,11 @@
         <span id="proj-sigmf" class="proj" title="projected disk usage at current stream parameters">&ndash;</span>
       </span>
       <button id="btn-stop" class="btn btn-stop" type="button" disabled>Stop</button>
+      <button id="btn-rfi-sweep" class="btn" type="button" disabled title="HackRF pre-session RFI survey &mdash; the live stream pauses for the sweep's duration">RFI sweep</button>
       <span id="capture-state" class="badge unknown">daemon&hellip;</span>
       <span id="overrun-badge" class="badge overrun hidden">OVERRUN &mdash; capture has gaps</span>
     </div>
+    <div id="rfi-result" class="hidden"></div>
     <div id="capture-live" class="hidden">
       <span class="stat">file <b id="cap-file">&ndash;</b></span>
       <span class="stat">elapsed <b id="cap-elapsed">&ndash;</b></span>

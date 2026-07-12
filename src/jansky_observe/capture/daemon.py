@@ -6,7 +6,10 @@ publishes the encoded frames on a ZeroMQ PUB socket at a paced frame rate
 for the API server to fan out to browsers. A ZeroMQ REP control socket
 (:mod:`jansky_observe.control`) answers ``status`` and drives capture
 start/stop: ``.npz`` captures record the published frames; SigMF captures
-drain the source's lossless tap while the live frames keep flowing.
+drain the source's lossless tap while the live frames keep flowing. The
+``rfi_sweep`` command runs a blocking HackRF survey
+(:mod:`jansky_observe.capture.hackrf_sweep`) — the frame stream pauses for
+its duration.
 
 Sources: ``--source synthetic`` (no hardware) or ``--source airspy`` (the
 real Airspy Mini via ``airspy_rx``). SAFETY: the hardware path goes through
@@ -30,6 +33,7 @@ import zmq
 
 from jansky_observe import __version__
 from jansky_observe.capture.dsp import welch_psd_db
+from jansky_observe.capture.hackrf_sweep import DEFAULT_NUM_SWEEPS, run_sweep, summarize_sweep
 from jansky_observe.capture.profiles import HLINE_AIRSPY, validate_profile
 from jansky_observe.capture.sources import SDRSource, SyntheticHISource
 from jansky_observe.capture.writer import NpzCaptureWriter, SigmfCaptureWriter
@@ -51,12 +55,14 @@ class CaptureManager:
         n_fft: int,
         fps: float,
         settings: dict[str, Any] | None = None,
+        hackrf_binary: str | list[str] = "hackrf_sweep",
     ) -> None:
         self._source = source
         self._data_dir = Path(data_dir)
         self._source_name = source_name
         self._n_fft = n_fft
         self._fps = fps
+        self._hackrf_binary = hackrf_binary
         self._settings = dict(settings or {})
         self._format: str | None = None
         self._npz: NpzCaptureWriter | None = None
@@ -156,6 +162,25 @@ class CaptureManager:
         self._sigmf = None
         return final
 
+    def rfi_sweep(self, freq_lo_mhz: float, freq_hi_mhz: float) -> dict[str, Any]:
+        """Run a blocking ``hackrf_sweep`` RFI survey (plan §4.2).
+
+        The PUB frame stream stalls for the sweep's duration (seconds) —
+        inherent to one-process SDR ownership: the daemon answers control
+        requests between frames, so the sweep runs in the frame loop's turn.
+        Refused with ``{"ok": false}`` while a capture is in progress. The
+        success reply is ``{"ok": true, "path", "num_sweeps"}`` plus the
+        :func:`~jansky_observe.capture.hackrf_sweep.summarize_sweep` summary.
+        """
+        if self.capturing:
+            return {"ok": False, "error": f"capture in progress ({self._path}) — stop it first"}
+        try:
+            path = run_sweep(self._data_dir, freq_lo_mhz, freq_hi_mhz, binary=self._hackrf_binary)
+            summary = summarize_sweep(path)
+        except (RuntimeError, ValueError, OSError) as exc:
+            return {"ok": False, "error": str(exc)}
+        return {"ok": True, "path": str(path), "num_sweeps": DEFAULT_NUM_SWEEPS, **summary}
+
     def handle(self, raw: bytes) -> dict[str, Any]:
         """Dispatch one control-channel request."""
         try:
@@ -169,6 +194,13 @@ class CaptureManager:
             return self.start(request.get("format", ""))
         if cmd == "stop_capture":
             return self.stop()
+        if cmd == "rfi_sweep":
+            try:
+                lo = float(request.get("freq_lo_mhz", 1000))
+                hi = float(request.get("freq_hi_mhz", 2000))
+            except (TypeError, ValueError):
+                return {"ok": False, "error": "freq_lo_mhz/freq_hi_mhz must be numbers"}
+            return self.rfi_sweep(lo, hi)
         return {"ok": False, "error": f"unknown command {cmd!r}"}
 
 
@@ -223,6 +255,7 @@ def run(
     data_dir: str | Path = "data",
     source_name: str = "synthetic",
     on_ctl_bound: Callable[[str], None] | None = None,
+    hackrf_binary: str | list[str] = "hackrf_sweep",
 ) -> int:
     """Bind a ZeroMQ PUB socket and publish spectral frames at a paced rate.
 
@@ -261,7 +294,12 @@ def run(
     socket = ctx.socket(zmq.PUB)
     rep: zmq.Socket | None = None
     manager = CaptureManager(
-        source, data_dir=data_dir, source_name=source_name, n_fft=n_fft, fps=fps
+        source,
+        data_dir=data_dir,
+        source_name=source_name,
+        n_fft=n_fft,
+        fps=fps,
+        hackrf_binary=hackrf_binary,
     )
     published = 0
     try:
@@ -346,6 +384,11 @@ def main(argv: list[str] | None = None) -> int:
         default="airspy_rx",
         help="airspy_rx executable (tests inject a fake)",
     )
+    parser.add_argument(
+        "--hackrf-binary",
+        default="hackrf_sweep",
+        help="hackrf_sweep executable for the RFI-sweep command (tests inject a fake)",
+    )
     parser.add_argument("--fps", type=float, default=4.0, help="frames per second (default 4.0)")
     parser.add_argument("--n-fft", type=int, default=2048, help="FFT bins per frame (default 2048)")
     parser.add_argument("--avg", type=int, default=8, help="Welch averages per frame (default 8)")
@@ -389,6 +432,7 @@ def main(argv: list[str] | None = None) -> int:
             ctl_endpoint=args.ctl_endpoint,
             data_dir=args.data_dir,
             source_name=source_name,
+            hackrf_binary=args.hackrf_binary,
         )
     except KeyboardInterrupt:
         pass

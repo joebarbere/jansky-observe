@@ -141,6 +141,14 @@ body {
 
 #capture-error.hidden { display: none; }
 #capture-live.hidden { display: none; }
+
+/* RFI sweep one-line result (plan §5.2) */
+#rfi-result {
+  color: var(--muted);
+  font-size: 13px;
+  padding: 0.1rem 0;
+}
+#rfi-result.hidden { display: none; }
 .badge.hidden { display: none; }
 
 main {

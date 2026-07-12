@@ -71,6 +71,9 @@ class Station(SQLModel, table=True):
     pointing_offset_az_deg: float = 0.0
     #: Δel from the Sun pointing calibration (gauge reading minus prediction).
     pointing_offset_el_deg: float = 0.0
+    #: Base URL of a desktop Stellarium's RemoteControl API (plan §4.3),
+    #: e.g. ``"http://desktop:8090"``; ``None`` disables the integration.
+    stellarium_url: str | None = None
     created_at: datetime = Field(default_factory=utcnow)
     updated_at: datetime = Field(default_factory=utcnow)
 

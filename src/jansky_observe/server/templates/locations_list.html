@@ -16,6 +16,15 @@
   {% endfor %}
 </table>
 <section class="pane pad">
+  <h2>Use GPS fix</h2>
+  <p class="muted">Optional hardware (plan §4.5): needs a USB GPS dongle and gpsd running
+    (default 127.0.0.1:2947; override with JANSKY_OBSERVE_GPSD). Creates or updates a
+    "GPS fix" location for a portable setup.</p>
+  <button class="btn" hx-post="/catalog/locations/from-gps"
+          hx-target="#gps-result" hx-swap="innerHTML">Use GPS fix</button>
+  <div id="gps-result"></div>
+</section>
+<section class="pane pad">
   <h2>Add location</h2>
   <form method="post" action="/catalog/locations" class="grid-form">
     <label>name <input name="name" required></label>
