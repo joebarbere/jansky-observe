@@ -169,3 +169,92 @@ canvas {
 }
 
 #overlay.hidden { display: none; }
+
+/* ---- content pages (M2 observation records) ----------------------------- */
+
+body.content { display: block; height: auto; min-height: 100%; }
+
+#topnav {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.5rem 0.75rem;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+
+#topnav a { color: var(--text); text-decoration: none; }
+#topnav a:hover { color: var(--accent); }
+#topnav a.nav-cta { color: var(--accent); font-weight: 600; }
+#topnav .nav-gap { flex: 1; }
+
+.page { max-width: 960px; margin: 0 auto; padding: 1rem 0.75rem 3rem; }
+.page h1 { font-size: 1.3rem; margin: 0.5rem 0 1rem; }
+.page h2 { font-size: 1.05rem; margin-bottom: 0.6rem; color: var(--accent); }
+.page h3 { font-size: 1rem; margin-bottom: 0.4rem; }
+.page h4 { font-size: 0.95rem; margin: 0.6rem 0 0.3rem; color: var(--muted); }
+.page section { margin-bottom: 1rem; }
+.page p { margin-bottom: 0.5rem; }
+
+.pad { padding: 0.75rem; }
+.muted { color: var(--muted); }
+.warn-text { color: var(--warn); }
+.notice { border-color: var(--warn); color: var(--warn); margin-bottom: 1rem; }
+.row { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; }
+.actions { margin-bottom: 1rem; }
+
+table.list { border-collapse: collapse; width: 100%; margin-bottom: 1rem; }
+table.list th, table.list td {
+  text-align: left;
+  padding: 0.3rem 0.6rem;
+  border-bottom: 1px solid var(--border);
+}
+table.list th { color: var(--muted); font-weight: 600; }
+
+table.kv th { text-align: left; color: var(--muted); padding: 0.15rem 1rem 0.15rem 0; vertical-align: top; white-space: nowrap; }
+table.kv td { padding: 0.15rem 0; }
+table.kv b { color: var(--accent); }
+
+a { color: var(--accent); }
+
+input, select, textarea {
+  font: inherit;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 0.25rem 0.4rem;
+}
+input:focus, select:focus, textarea:focus { outline: none; border-color: var(--accent); }
+textarea { width: 100%; resize: vertical; margin-bottom: 0.5rem; }
+input[type="checkbox"], input[type="radio"] { accent-color: var(--accent); }
+
+.grid-form { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: end; }
+.grid-form label { display: flex; flex-direction: column; gap: 0.2rem; font-size: 12px; color: var(--muted); }
+.grid-form label.wide { flex: 1 1 100%; }
+
+.wizard-form { display: flex; flex-direction: column; gap: 0.9rem; }
+.wizard-form fieldset { border: 1px solid var(--border); border-radius: 4px; padding: 0.5rem 0.75rem; }
+.wizard-form legend { color: var(--muted); padding: 0 0.3rem; }
+.wizard-form label.check { display: block; padding: 0.15rem 0; }
+.wizard-form > label { display: flex; flex-direction: column; gap: 0.2rem; max-width: 28rem; }
+
+/* status badges on observation pages */
+.badge.planned { background: var(--muted); }
+.badge.running { background: var(--ok); }
+.badge.done { background: var(--accent); }
+.badge.aborted { background: var(--bad); }
+
+.checklist { list-style: none; }
+.checklist li { padding: 0.3rem 0; border-bottom: 1px solid var(--border); }
+.checklist .cl-meta { display: block; margin-left: 1.6rem; color: var(--ok); font-size: 12px; }
+.req { color: var(--warn); font-size: 11px; margin-left: 0.4rem; }
+.rec { color: var(--muted); font-size: 11px; margin-left: 0.4rem; }
+#checklist form { margin-top: 0.75rem; }
+
+.offsets-big { font-size: 1.4rem; color: var(--accent); }
+.rf-chain { margin-left: 1.5rem; }
+.rf-chain li { padding: 0.15rem 0; }
+.template-checklist { margin-left: 1.5rem; }
+.sdr code { color: var(--accent); }

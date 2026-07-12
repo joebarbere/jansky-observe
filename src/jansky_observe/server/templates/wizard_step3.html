@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}new session · step 3 — jansky-observe{% endblock %}
+{% block content %}
+<h1>{{ obs.name }} <span class="muted">— step 3 of 4: point the dish</span></h1>
+<section class="pane pad">
+  <p>Point the dish by hand at <b>{{ source.name }}</b>:
+     computed <b class="offsets-big">az {{ "%.1f"|format(pointing.az_deg) }}° · el {{ "%.1f"|format(pointing.el_deg) }}°</b>
+     <span class="muted">(offsets applied; raw {{ "%.1f"|format(pointing.raw_az_deg) }}° / {{ "%.1f"|format(pointing.raw_el_deg) }}°)</span></p>
+  <form method="post" action="/wizard/{{ obs.id }}/step3" class="row">
+    <label>dialed az° <input type="number" step="0.1" name="pointing_az_deg" value="{{ "%.1f"|format(az_value) }}" required></label>
+    <label>dialed el° <input type="number" step="0.1" name="pointing_el_deg" value="{{ "%.1f"|format(el_value) }}" required></label>
+    <button class="btn btn-start" type="submit">Next: checklist</button>
+  </form>
+</section>
+{% endblock %}

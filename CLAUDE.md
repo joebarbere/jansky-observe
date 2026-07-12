@@ -35,6 +35,8 @@ If a change seems to require enabling the internal bias tee, it's wrong — stop
   branch.
 - Run `/verify` before any commit — it includes the end-to-end synthetic smoke, not just the
   static checks.
+- **Schema changes go through `/new-migration` — never edit or renumber an existing
+  migration.**
 
 ## Layout
 
@@ -45,7 +47,17 @@ If a change seems to require enabling the internal bias tee, it's wrong — stop
     `.npz` + SigMF), `dsp.py` (Welch PSD),
     `profiles.py` (device profiles incl. the bias-tee-guarded `HLINE_AIRSPY`)
   - `server/` — FastAPI app: `app.py` (`create_app` / `app`), `cli.py` (entry `jansky-observe`),
-    `templates/`, `static/waterfall.js` (the canvas live view)
+    `routers/` (REST CRUD + the session wizard), `templates/`, `static/waterfall.js` (the
+    canvas live view)
+  - `mcp/` — the MCP tool surface mounted at `/mcp` on the API server (read + safe verbs
+    only; no bias-tee control, no deletes — plan §12.4)
+  - `models.py` — the SQLModel data model (Station, Observation, Capture, checklists, … —
+    plan §3)
+  - `db.py` — SQLite engine + forward-migration-on-start (`MIGRATIONS` on
+    `PRAGMA user_version`; change schema only via `/new-migration`)
+  - `seeds.py` — seed data: source list + the observing-ladder ObservationTypes (plan §5.4)
+  - `astro/` — astropy pointing: az/el, transit, drift rate, beam-crossing (`pointing.py`)
+  - `weather/` — `WeatherProvider` protocol: NWS primary, Open-Meteo fallback
   - `frames.py` — spectral-frame wire formats shared by daemon and server (ZMQ + WebSocket)
   - `control.py` — the ZMQ REP control channel (capture start/stop, daemon ↔ server)
   - `synthetic.py` — synthetic noise + fake-HI generators (M0 skeleton, test fixtures)
@@ -78,12 +90,12 @@ nothing by design.
 
 ## Current status
 
-M0 walking skeleton shipped: synthetic capture daemon → ZMQ → FastAPI → WebSocket → canvas
-waterfall, plus the full CI/release/install pipeline. **M1 (first light) is in progress on
-`m1/first-light`:** the real Airspy via `airspy_rx` subprocess (`--source airspy`; bias tee
-forced OFF per the power rule), capture writers to `.npz` + SigMF, and the ZMQ REP control
-channel. **M2 (observation records) is next.** The full plan lives in
-`plans/jansky_observe.md` — read it before any feature work.
+M0 (walking skeleton + pipeline) and M1 (first light: real Airspy, capture writers, control
+channel) have shipped — `v0.2.0`. **M2 (observation records) is in progress on
+`m2/observation-records`:** the SQLModel data model + forward migrations (`models.py`,
+`db.py`, `seeds.py`), astropy pointing (`astro/`) + weather (`weather/`), CRUD + the session
+wizard, and the MCP surface mounted at `/mcp` on the API server. **M3 (confirmation) is
+next.** The full plan lives in `plans/jansky_observe.md` — read it before any feature work.
 
 ## Skills & agents
 
@@ -92,7 +104,12 @@ channel. **M2 (observation records) is next.** The full plan lives in
   upgrade the real Pi).
 - `/synthetic-fixture` — generate deterministic synthetic IQ/spectrum fixtures so DSP and
   classifier tests never need hardware or sky.
+- `/plan-session` — "what should I point at tonight?": whats-up + weather via the station
+  MCP, ranked by the observing ladder, ending in a pre-filled draft Observation.
+- `/troubleshoot-chain` — the no-signal decision tree in strict order (injector current →
+  bias-tee states *checked never changed* → gain → USB → daemon → frequency → tinySA).
+- `/new-migration` — scaffold a forward migration: the next `(N, callable)` in
+  `db.py`'s `MIGRATIONS`, the matching `models.py` change, and the round-trip test.
 
-More arrive with the milestones per plan §12.6: the MCP surface + `/plan-session` +
-`/troubleshoot-chain` + `/new-migration` at M2; `/observing-copilot`, `/analyze-observation`,
+More arrive with the milestones per plan §12.6: `/observing-copilot`, `/analyze-observation`,
 `hi-data-analyst`, `dsp-reviewer` at M3; `/write-up`, `/compare-observations` at M4.

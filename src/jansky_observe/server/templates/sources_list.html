@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}sources — jansky-observe{% endblock %}
+{% block content %}
+<h1>Radio sources</h1>
+<table class="list">
+  <tr><th>name</th><th>kind</th><th>RA°</th><th>Dec°</th><th>l°</th><th>b°</th><th>notes</th></tr>
+  {% for s in sources %}
+  <tr>
+    <td><a href="/catalog/sources/{{ s.id }}">{{ s.name }}</a></td>
+    <td>{{ s.kind }}</td>
+    <td>{{ s.ra_deg if s.ra_deg is not none else "—" }}</td>
+    <td>{{ s.dec_deg if s.dec_deg is not none else "—" }}</td>
+    <td>{{ s.gal_l_deg if s.gal_l_deg is not none else "—" }}</td>
+    <td>{{ s.gal_b_deg if s.gal_b_deg is not none else "—" }}</td>
+    <td class="muted">{{ s.notes }}</td>
+  </tr>
+  {% endfor %}
+</table>
+<section class="pane pad">
+  <h2>Add source</h2>
+  <form method="post" action="/catalog/sources" class="grid-form">
+    <label>name <input name="name" required></label>
+    <label>kind
+      <select name="kind">
+        <option value="custom">custom</option>
+        <option value="point_source">point_source</option>
+        <option value="hi_region">hi_region</option>
+        <option value="sun">sun</option>
+      </select>
+    </label>
+    <label>RA° <input name="ra_deg" type="number" step="any"></label>
+    <label>Dec° <input name="dec_deg" type="number" step="any"></label>
+    <label>l° <input name="gal_l_deg" type="number" step="any"></label>
+    <label>b° <input name="gal_b_deg" type="number" step="any"></label>
+    <label class="wide">notes <input name="notes"></label>
+    <button class="btn" type="submit">Add</button>
+  </form>
+</section>
+{% endblock %}

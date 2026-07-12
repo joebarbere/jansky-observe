@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}new session · step 4 — jansky-observe{% endblock %}
+{% block content %}
+<h1>{{ obs.name }} <span class="muted">— step 4 of 4: checklist</span></h1>
+<section class="pane pad">
+  <p class="row"><label for="who">tick as</label>
+    <select id="who" name="by">
+      {% for o in observers %}<option value="{{ o.name }}">{{ o.name }}</option>{% endfor %}
+      <option value="claude">claude</option>
+    </select>
+    <a class="btn btn-small" href="/wizard/{{ obs.id }}/step3">back to pointing</a>
+  </p>
+  {% include "_checklist.html" %}
+</section>
+{% endblock %}

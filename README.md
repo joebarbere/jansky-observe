@@ -28,15 +28,16 @@ flowchart LR
 
 ## Status
 
-**M0 — walking skeleton — shipped:** synthetic capture daemon → ZMQ → WebSocket → canvas
-waterfall, plus the full pipeline (CI, release workflow with a release-blocking install gate,
-`install.sh`, QEMU install test against the pinned Pi OS image).
+**M1 — first light — shipped:** the real Airspy source (bias tee forced OFF per the power
+rule), live waterfall + spectrum, captures to `.npz`/SigMF with a live disk readout — on top
+of M0's full pipeline (CI, release workflow with a release-blocking install gate, `install.sh`,
+QEMU install test against the pinned Pi OS image).
 
 | Tag | Milestone | Release means | |
 |---|---|---|---|
 | `v0.1.0` | M0 | Walking skeleton + the whole CI/release/install pipeline | ✅ done |
-| `v0.2.0` | M1 | First light: real Airspy source, capture to `.npz`/SigMF with live disk readout | ⏭ current |
-| `v0.3.0` | M2 | Observation records, checklists, session wizard | |
+| `v0.2.0` | M1 | First light: real Airspy source, capture to `.npz`/SigMF with live disk readout | ✅ done |
+| `v0.3.0` | M2 | Observation records, checklists, session wizard | ⏭ current |
 | `v0.4.0` | M3 | Confirmation: rule-based classifier + HI4PI cross-check | |
 | `v0.5.0` | M4 | Reports & photos: PDF export, Virgo/ezRA exporters | |
 | `v0.6.0` | M5 | Feature-complete — the `v1.0.0` release candidate | |
@@ -74,6 +75,25 @@ curl -fsSL https://github.com/joebarbere/jansky-observe/releases/latest/download
 
 (it edits `/etc/default/jansky-observe` and restarts only the capture daemon; the API
 server and its records stay up).
+
+### Observing
+
+Sessions run through the **session wizard** (linked from the home page at
+`http://raspberrypi.local:8000`): pick a target from the seeded source list, get az/el,
+transit time, drift rate, and the weather snapshot, then work the type's checklist — every
+tick is persisted with who and when. The seeded observation types form the **observing
+ladder**, and it starts with **Sun pointing calibration**: it measures the Δaz/Δel offsets
+the server applies to every future pointing display, so do it before anything pointed.
+
+Claude can plan and troubleshoot at the dish too — the server exposes a read-mostly MCP
+surface (no bias-tee control, no deletes, by design):
+
+```bash
+claude mcp add --transport http jansky-observe http://raspberrypi.local:8000/mcp
+```
+
+then `/plan-session` recommends tonight's target and pre-fills a draft observation in the
+wizard.
 
 ## Install on the Pi
 

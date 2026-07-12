@@ -1,0 +1,23 @@
+<div id="checklist">
+  <ul class="checklist">
+    {% for state, item in checklist %}
+    <li>
+      <label>
+        <input type="checkbox" name="checked"
+               hx-post="/observations/{{ obs.id }}/checklist/{{ state.id }}?view={{ view }}"
+               hx-include="#who" hx-target="#checklist" hx-swap="outerHTML"
+               {% if state.checked %}checked{% endif %}>
+        <span class="cl-text">{{ item.text }}</span>
+        <span class="{{ 'req' if item.required else 'rec' }}">{{ 'required' if item.required else 'recommended' }}</span>
+      </label>
+      {% if state.checked %}<span class="cl-meta">✓ {{ state.checked_by }} · {{ state.checked_at | dt }}</span>{% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+  {% if view == "wizard" %}
+  <form method="post" action="/observations/{{ obs.id }}/start" class="row">
+    <button id="btn-start-obs" class="btn btn-start" type="submit" {% if not required_ok %}disabled{% endif %}>Start observation</button>
+    {% if not required_ok %}<span class="muted">tick every required item to enable</span>{% endif %}
+  </form>
+  {% endif %}
+</div>

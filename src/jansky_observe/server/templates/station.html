@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}station — jansky-observe{% endblock %}
+{% block content %}
+<h1>Station — {{ station.name }}</h1>
+
+<section class="pane pad offsets">
+  <h2>Pointing offsets (from Sun calibration, plan §5.4)</h2>
+  <p class="offsets-big">Δaz {{ "%+.2f"|format(station.pointing_offset_az_deg) }}° &nbsp;·&nbsp; Δel {{ "%+.2f"|format(station.pointing_offset_el_deg) }}°</p>
+  <p class="muted">Applied to every pointing display: dial = predicted + offset.</p>
+  <form method="post" action="/station/offsets" class="row">
+    <label>Δaz° <input type="number" step="0.01" name="offset_az_deg" value="{{ station.pointing_offset_az_deg }}"></label>
+    <label>Δel° <input type="number" step="0.01" name="offset_el_deg" value="{{ station.pointing_offset_el_deg }}"></label>
+    <button class="btn" type="submit">Save offsets</button>
+  </form>
+</section>
+
+<section class="pane pad">
+  <h2>Dish</h2>
+  <table class="kv">
+    <tr><th>diameter</th><td>{{ station.dish_diameter_m }} m</td></tr>
+    <tr><th>f/D</th><td>{{ station.dish_f_d }}</td></tr>
+    <tr><th>feed</th><td>{{ station.feed }}</td></tr>
+    <tr><th>mount</th><td>{{ station.mount_type }}</td></tr>
+    <tr><th>compute</th><td>{{ station.compute }}</td></tr>
+  </table>
+</section>
+
+<section class="pane pad">
+  <h2>RF chain</h2>
+  <ol class="rf-chain">
+    {% for component in station.rf_chain %}<li>{{ component }}</li>{% endfor %}
+  </ol>
+</section>
+
+{% if station.notes %}
+<section class="pane pad"><h2>Notes</h2><p>{{ station.notes }}</p></section>
+{% endif %}
+{% endblock %}

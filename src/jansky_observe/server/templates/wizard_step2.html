@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}new session · step 2 — jansky-observe{% endblock %}
+{% block content %}
+<h1>{{ name }} <span class="muted">— step 2 of 4: pick a source</span></h1>
+<form method="post" action="/wizard/create" class="pane pad wizard-form">
+  <input type="hidden" name="name" value="{{ name }}">
+  <input type="hidden" name="observation_type_id" value="{{ obs_type.id }}">
+  <input type="hidden" name="location_id" value="{{ location_id }}">
+  {% for oid in observer_ids %}<input type="hidden" name="observer_ids" value="{{ oid }}">{% endfor %}
+  <fieldset>
+    <legend>Source</legend>
+    {% for s in sources %}
+    <label class="check">
+      <input type="radio" name="source_id" value="{{ s.id }}" required
+             hx-get="/wizard/pointing?source_id={{ s.id }}&location_id={{ location_id }}"
+             hx-target="#pointing-info" hx-swap="outerHTML">
+      {{ s.name }} <span class="muted">({{ s.kind }})</span>
+    </label>
+    {% endfor %}
+  </fieldset>
+  <div id="pointing-info" class="pane pad muted">pick a source to see pointing &amp; weather</div>
+  <button class="btn btn-start" type="submit">Next: point the dish</button>
+</form>
+{% endblock %}

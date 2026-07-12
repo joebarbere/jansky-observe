@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}jansky-observe{% endblock %}</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <script src="/static/htmx.min.js"></script>
+</head>
+<body class="content">
+  <nav id="topnav">
+    <a href="/">Live</a>
+    <a href="/observations">Observations</a>
+    <a href="/wizard" class="nav-cta">New session</a>
+    <span class="nav-gap"></span>
+    <a href="/catalog/sources">Sources</a>
+    <a href="/catalog/observers">Observers</a>
+    <a href="/catalog/types">Types</a>
+    <a href="/catalog/locations">Locations</a>
+    <a href="/station">Station</a>
+  </nav>
+  <main class="page">
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>

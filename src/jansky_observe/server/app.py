@@ -33,11 +33,14 @@ from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
+from sqlalchemy import Engine
 
 from jansky_observe import __version__
 from jansky_observe.config import Settings, settings_from_env
 from jansky_observe.control import ctl_request
+from jansky_observe.db import init_db
 from jansky_observe.frames import SpectralFrame, decode_zmq, pack_ws
+from jansky_observe.server.routers import catalog, observations, wizard
 
 __all__ = ["Broadcaster", "CaptureStartBody", "app", "create_app"]
 
@@ -208,31 +211,46 @@ async def _zmq_relay(endpoint: str, broadcaster: Broadcaster) -> None:
 
 @contextlib.asynccontextmanager
 async def _lifespan(application: FastAPI) -> AsyncIterator[None]:
-    """Run the ZMQ relay task for the app's lifetime; cancel it cleanly on shutdown."""
+    """Open/migrate the database and run the ZMQ relay for the app's lifetime.
+
+    ``init_db`` is the migrate-on-start promise (plan §9, M2): the SQLite
+    schema is walked forward every server start. Tests inject a ready engine
+    via :func:`create_app`, in which case migration is skipped here.
+    """
     settings: Settings = application.state.settings
     broadcaster: Broadcaster = application.state.broadcaster
+    if application.state.engine is None:
+        application.state.engine = init_db(settings.data_dir)
     task = asyncio.create_task(_zmq_relay(settings.zmq_endpoint, broadcaster))
     application.state.relay_task = task
+    # FastMCP's HTTP transport runs a session manager inside the sub-app's own
+    # lifespan — it must be entered here or /mcp requests 500.
+    mcp_app = application.state.mcp_app
     try:
-        yield
+        async with mcp_app.router.lifespan_context(mcp_app):
+            yield
     finally:
         task.cancel()
         with contextlib.suppress(asyncio.CancelledError):
             await task
 
 
-def create_app(settings: Settings | None = None) -> FastAPI:
+def create_app(settings: Settings | None = None, engine: Engine | None = None) -> FastAPI:
     """Build the FastAPI application.
 
     Parameters
     ----------
     settings : Settings, optional
         Runtime settings; defaults to :func:`jansky_observe.config.settings_from_env`.
+    engine : Engine, optional
+        A ready (already migrated) database engine — used by tests. When
+        omitted, the lifespan opens and migrates ``<data_dir>`` on start.
 
     Returns
     -------
     FastAPI
-        The application, with ``settings`` and ``broadcaster`` on ``app.state``.
+        The application, with ``settings``, ``broadcaster``, and ``engine``
+        on ``app.state``.
     """
     if settings is None:
         settings = settings_from_env()
@@ -241,7 +259,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application = FastAPI(title="jansky-observe", version=__version__, lifespan=_lifespan)
     application.state.settings = settings
     application.state.broadcaster = Broadcaster()
+    application.state.engine = engine
     application.mount("/static", StaticFiles(directory=str(_PACKAGE_DIR / "static")), name="static")
+    application.include_router(observations.router)
+    application.include_router(catalog.router)
+    application.include_router(wizard.router)
+    # The MCP surface (plan §12.4): Claude as a console peer of the browser UI.
+    from jansky_observe.mcp import mount_mcp
+
+    application.state.mcp_app = mount_mcp(application)
 
     @application.get("/", response_class=HTMLResponse)
     async def index(request: Request) -> HTMLResponse:
