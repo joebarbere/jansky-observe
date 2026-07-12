@@ -15,13 +15,15 @@ Group=jansky
 # SDRs, but parity with the capture daemon keeps permissions unsurprising.
 SupplementaryGroups=plugdev
 Environment=JANSKY_OBSERVE_ZMQ_ENDPOINT=tcp://127.0.0.1:8410
+Environment=JANSKY_OBSERVE_CTL_ENDPOINT=tcp://127.0.0.1:8411
+Environment=JANSKY_OBSERVE_DATA_DIR=/var/lib/jansky-observe
 WorkingDirectory=/var/lib/jansky-observe
 ExecStart=/opt/jansky-observe/venv/bin/jansky-observe --host 0.0.0.0 --port 8000
 Restart=on-failure
 RestartSec=2
 
 # Hardening — deliberately stops short of PrivateDevices/DeviceAllow, which would
-# break USB SDR access when M1 swaps in the real Airspy.
+# break USB SDR access for the real Airspy source (--source airspy).
 NoNewPrivileges=true
 ProtectSystem=full
 ProtectHome=true

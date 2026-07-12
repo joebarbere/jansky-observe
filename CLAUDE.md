@@ -18,7 +18,9 @@ bias-tee injector instead. Concretely:
 - Any diff touching `src/jansky_observe/capture/profiles.py` or device handling MUST preserve
   `bias_tee=False` in the H-line profile (`HLINE_AIRSPY`) AND keep the guard test in
   `tests/test_profiles.py` passing. Never weaken or delete that test.
-- Never add `airspy_rx -b 1` or Soapy bias-tee enablement to any H-line code path.
+- Never add `airspy_rx -b 1` or Soapy bias-tee enablement to any H-line code path —
+  `src/jansky_observe/capture/airspy_cli.py` (which builds the `airspy_rx` command line) is a
+  bias-tee-guarded path just like `profiles.py`.
 - The future MCP surface will never expose bias-tee control in any form (plan §12.4) — the
   guardrail is structural, not behavioral. Don't add such a tool, ever.
 
@@ -38,11 +40,14 @@ If a change seems to require enabling the internal bias tee, it's wrong — stop
 
 - `src/jansky_observe/`
   - `capture/` — the SDR-owning daemon: `daemon.py` (entry `jansky-observe-capture`),
-    `sources.py` (`SDRSource` protocol + `SyntheticHISource`), `dsp.py` (Welch PSD),
+    `sources.py` (`SDRSource` protocol + `SyntheticHISource`), `airspy_cli.py` (the real Airspy
+    via `airspy_rx` subprocess — bias-tee-guarded, see above), `writer.py` (capture writers:
+    `.npz` + SigMF), `dsp.py` (Welch PSD),
     `profiles.py` (device profiles incl. the bias-tee-guarded `HLINE_AIRSPY`)
   - `server/` — FastAPI app: `app.py` (`create_app` / `app`), `cli.py` (entry `jansky-observe`),
     `templates/`, `static/waterfall.js` (the canvas live view)
   - `frames.py` — spectral-frame wire formats shared by daemon and server (ZMQ + WebSocket)
+  - `control.py` — the ZMQ REP control channel (capture start/stop, daemon ↔ server)
   - `synthetic.py` — synthetic noise + fake-HI generators (M0 skeleton, test fixtures)
   - `config.py` — `JANSKY_OBSERVE_*` env settings
 - `tests/` — pytest, synthetic fixtures only, no hardware (incl. `test_profiles.py`, the
@@ -73,9 +78,12 @@ nothing by design.
 
 ## Current status
 
-M0 walking skeleton: synthetic capture daemon → ZMQ → FastAPI → WebSocket → canvas waterfall,
-plus the full CI/release/install pipeline. **M1 (first light with the real Airspy) is next.**
-The full plan lives in `plans/jansky_observe.md` — read it before any feature work.
+M0 walking skeleton shipped: synthetic capture daemon → ZMQ → FastAPI → WebSocket → canvas
+waterfall, plus the full CI/release/install pipeline. **M1 (first light) is in progress on
+`m1/first-light`:** the real Airspy via `airspy_rx` subprocess (`--source airspy`; bias tee
+forced OFF per the power rule), capture writers to `.npz` + SigMF, and the ZMQ REP control
+channel. **M2 (observation records) is next.** The full plan lives in
+`plans/jansky_observe.md` — read it before any feature work.
 
 ## Skills & agents
 

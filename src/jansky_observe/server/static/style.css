@@ -56,6 +56,78 @@ body {
 .badge.connecting, .badge.waiting { background: var(--warn); }
 .badge.live { background: var(--ok); }
 .badge.disconnected { background: var(--bad); }
+.badge.idle { background: var(--muted); }
+.badge.recording { background: var(--ok); }
+.badge.unreachable, .badge.unknown { background: var(--warn); }
+
+.badge.overrun {
+  background: var(--bad);
+  color: #fff;
+  font-weight: 700;
+}
+
+/* ---- capture panel ------------------------------------------------------ */
+
+#capture-panel {
+  margin: 0.5rem 0.5rem 0;
+  padding: 0.5rem 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+#capture-controls, #capture-live {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.ctl-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.btn {
+  font: inherit;
+  color: var(--text);
+  background: var(--border);
+  border: 1px solid var(--muted);
+  border-radius: 3px;
+  padding: 0.25rem 0.8rem;
+  cursor: pointer;
+}
+
+.btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+.btn:disabled { opacity: 0.45; cursor: default; }
+.btn-small { padding: 0.05rem 0.5rem; font-size: 12px; }
+.btn-stop:hover:not(:disabled) { border-color: var(--bad); color: var(--bad); }
+
+.proj { color: var(--muted); font-size: 12px; white-space: nowrap; }
+
+/* Projected rate that will chew through the SD card — impossible to miss. */
+.proj.hot {
+  color: var(--bg);
+  background: var(--warn);
+  font-weight: 700;
+  padding: 0.1rem 0.45rem;
+  border-radius: 3px;
+}
+
+#capture-live .stat b { color: var(--accent); font-weight: 600; }
+
+#capture-error {
+  color: var(--bg);
+  background: var(--bad);
+  border-radius: 3px;
+  padding: 0.3rem 0.6rem;
+  font-size: 13px;
+}
+
+#capture-error.hidden { display: none; }
+#capture-live.hidden { display: none; }
+.badge.hidden { display: none; }
 
 main {
   position: relative;

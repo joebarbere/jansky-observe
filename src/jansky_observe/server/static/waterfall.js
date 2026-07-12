@@ -1,9 +1,13 @@
-/* jansky-observe live view: spectrum line plot + scrolling waterfall.
+/* jansky-observe live view: spectrum line plot + scrolling waterfall +
+ * accumulating average + capture controls.
  *
  * Dependency-free vanilla JS. Parses the pack_ws WebSocket binary layout:
  *   uint32 LE header length | UTF-8 JSON header | float32 LE power (dB)
  * Header: { v, seq, timestamp, center_freq_hz, sample_rate_hz, n_fft }.
  * Payload index 0 = lowest frequency. Newest waterfall row is at the TOP.
+ *
+ * The capture panel polls /api/capture/status (~2 s, only while the page is
+ * visible) and drives /api/capture/start|stop; 409/503 surface as a banner.
  */
 "use strict";
 
@@ -20,6 +24,22 @@
   const wfCanvas = document.getElementById("waterfall");
   const specCtx = specCanvas.getContext("2d");
   const wfCtx = wfCanvas.getContext("2d");
+  const avgCountEl = document.getElementById("avg-count");
+  const resetAvgBtn = document.getElementById("btn-reset-avg");
+  const startNpzBtn = document.getElementById("btn-start-npz");
+  const startSigmfBtn = document.getElementById("btn-start-sigmf");
+  const stopBtn = document.getElementById("btn-stop");
+  const projNpzEl = document.getElementById("proj-npz");
+  const projSigmfEl = document.getElementById("proj-sigmf");
+  const capStateEl = document.getElementById("capture-state");
+  const overrunEl = document.getElementById("overrun-badge");
+  const capLiveEl = document.getElementById("capture-live");
+  const capFileEl = document.getElementById("cap-file");
+  const capElapsedEl = document.getElementById("cap-elapsed");
+  const capMbEl = document.getElementById("cap-mb");
+  const capRateEl = document.getElementById("cap-rate");
+  const capDiskEl = document.getElementById("cap-disk");
+  const capErrorEl = document.getElementById("capture-error");
 
   // ---- constants -------------------------------------------------------
   const HISTORY_ROWS = 320; // waterfall depth (frames)
@@ -27,6 +47,9 @@
   const RANGE_EMA = 0.05; // smoothing for the running color/dB range
   const STALE_MS = 3000; // no frame for this long => "waiting" state
   const MAX_BACKOFF_MS = 8000;
+  const STATUS_POLL_MS = 2000; // capture-status poll period (visible page only)
+  const HOT_GB_PER_HOUR = 10; // amber-highlight threshold for projected rates
+  const ERROR_HIDE_MS = 8000; // action-error banner auto-hide
 
   // Viridis-like colormap anchors (t in 0..1 -> RGB).
   const STOPS = [
@@ -69,6 +92,32 @@
   let fps = 0;
   // Offscreen waterfall history: width = n_fft, height = HISTORY_ROWS.
   const off = { canvas: null, ctx: null, nfft: 0, rows: 0 };
+  // Accumulating average: Float64 sum over frames, keyed by stream params.
+  const avg = { sum: null, count: 0, key: "" };
+
+  // ---- accumulating average ---------------------------------------------
+  function resetAverage(n, key) {
+    avg.sum = n > 0 ? new Float64Array(n) : null;
+    avg.count = 0;
+    avg.key = key || "";
+    avgCountEl.textContent = "0";
+  }
+
+  function accumulate(header, power) {
+    // Any change in stream parameters invalidates the running mean.
+    const key = header.center_freq_hz + "|" + header.sample_rate_hz + "|" + header.n_fft;
+    if (key !== avg.key || !avg.sum || avg.sum.length !== power.length) {
+      resetAverage(power.length, key);
+    }
+    for (let i = 0; i < power.length; i++) avg.sum[i] += power[i];
+    avg.count++;
+    avgCountEl.textContent = String(avg.count);
+  }
+
+  resetAvgBtn.addEventListener("click", function () {
+    resetAverage(avg.sum ? avg.sum.length : 0, avg.key);
+    drawSpectrum();
+  });
 
   // ---- binary parsing ----------------------------------------------------
   function parseFrame(buf) {
@@ -219,18 +268,25 @@
       specCtx.fillText(f.toFixed(digits), x, h - m.bottom + 4 * dpr);
     }
 
-    // Spectrum trace.
-    specCtx.strokeStyle = "#4fc3f7";
-    specCtx.lineWidth = 1.25 * dpr;
-    specCtx.beginPath();
-    const n = power.length;
-    for (let i = 0; i < n; i++) {
-      const x = m.left + (i / (n - 1)) * pw;
-      const y = yOf(power[i]);
-      if (i === 0) specCtx.moveTo(x, y);
-      else specCtx.lineTo(x, y);
+    function trace(values, scale, color, width) {
+      specCtx.strokeStyle = color;
+      specCtx.lineWidth = width * dpr;
+      specCtx.beginPath();
+      const n = values.length;
+      for (let i = 0; i < n; i++) {
+        const x = m.left + (i / (n - 1)) * pw;
+        const y = yOf(values[i] * scale);
+        if (i === 0) specCtx.moveTo(x, y);
+        else specCtx.lineTo(x, y);
+      }
+      specCtx.stroke();
     }
-    specCtx.stroke();
+
+    // Instantaneous trace (dimmed) behind the brighter accumulating average.
+    trace(power, 1, "rgba(79, 195, 247, 0.35)", 1.25);
+    if (avg.sum && avg.count > 0 && avg.sum.length === power.length) {
+      trace(avg.sum, 1 / avg.count, "#ffe082", 1.5);
+    }
   }
 
   // ---- status bar / overlay -------------------------------------------------
@@ -273,6 +329,7 @@
     lastFrameAt = Date.now();
     frameCount++;
     updateRange(frame.power);
+    accumulate(frame.header, frame.power);
     pushRow(frame.power);
     updateStats(frame.header);
     setStatus("live", "live");
@@ -326,4 +383,141 @@
     };
   }
   connect();
+
+  // ---- capture panel -------------------------------------------------------
+  let errorTimer = null;
+
+  function showCaptureError(msg) {
+    capErrorEl.textContent = msg;
+    capErrorEl.classList.remove("hidden");
+    if (errorTimer) clearTimeout(errorTimer);
+    errorTimer = setTimeout(function () {
+      capErrorEl.classList.add("hidden");
+    }, ERROR_HIDE_MS);
+  }
+
+  function setCaptureState(cls, text) {
+    capStateEl.className = "badge " + cls;
+    capStateEl.textContent = text;
+  }
+
+  function fmtProjected(gbPerHour) {
+    if (gbPerHour == null) return "–";
+    if (gbPerHour < 0.1) return "~" + (gbPerHour * 1000).toFixed(1) + " MB/h";
+    return "~" + gbPerHour.toFixed(1) + " GB/h";
+  }
+
+  function fmtElapsed(seconds) {
+    const s = Math.max(0, Math.floor(seconds));
+    const h = Math.floor(s / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    const mm = String(m).padStart(2, "0");
+    const ss = String(s % 60).padStart(2, "0");
+    return h > 0 ? h + ":" + mm + ":" + ss : m + ":" + ss;
+  }
+
+  function renderProjection(el, gbPerHour) {
+    el.textContent = fmtProjected(gbPerHour);
+    // The "before you fill the SD card" warning: amber when the projected
+    // rate is punishing (SigMF at 3 MSPS is tens of GB/h).
+    el.classList.toggle("hot", gbPerHour != null && gbPerHour > HOT_GB_PER_HOUR);
+  }
+
+  function renderCaptureStatus(st) {
+    const proj = st.projected_gb_per_hour || {};
+    renderProjection(projNpzEl, proj.npz);
+    renderProjection(projSigmfEl, proj.sigmf);
+    overrunEl.classList.toggle("hidden", !st.overrun);
+
+    startNpzBtn.disabled = st.capturing;
+    startSigmfBtn.disabled = st.capturing;
+    stopBtn.disabled = !st.capturing;
+    capLiveEl.classList.toggle("hidden", !st.capturing);
+
+    if (!st.capturing) {
+      setCaptureState("idle", "idle");
+      return;
+    }
+    setCaptureState("recording", "recording " + (st.format || ""));
+    capFileEl.textContent = st.path ? String(st.path).split("/").pop() : "–";
+    capElapsedEl.textContent = fmtElapsed(st.elapsed_s || 0);
+    capMbEl.textContent = ((st.bytes_written || 0) / 1e6).toFixed(1);
+    capRateEl.textContent = ((st.rate_bytes_per_s || 0) / 1e6).toFixed(2);
+    const free = st.disk_free_gb != null ? st.disk_free_gb.toFixed(1) + " GB free" : "–";
+    const toFull =
+      st.hours_to_full != null ? " · full in " + st.hours_to_full.toFixed(1) + " h" : "";
+    capDiskEl.textContent = free + toFull;
+  }
+
+  function setDaemonUnreachable(detail) {
+    setCaptureState("unreachable", "daemon unreachable");
+    startNpzBtn.disabled = true;
+    startSigmfBtn.disabled = true;
+    stopBtn.disabled = true;
+    capLiveEl.classList.add("hidden");
+    overrunEl.classList.add("hidden");
+    if (detail) showCaptureError(detail);
+  }
+
+  async function detailOf(resp) {
+    try {
+      const body = await resp.json();
+      return body.detail || resp.status + " " + resp.statusText;
+    } catch (err) {
+      return resp.status + " " + resp.statusText;
+    }
+  }
+
+  async function pollCaptureStatus() {
+    if (document.visibilityState !== "visible") return;
+    let resp;
+    try {
+      resp = await fetch("/api/capture/status");
+    } catch (err) {
+      setDaemonUnreachable(null); // server itself unreachable; WS badge covers it
+      return;
+    }
+    if (resp.ok) {
+      renderCaptureStatus(await resp.json());
+    } else if (resp.status === 503) {
+      setDaemonUnreachable(null); // steady state, not a toast-worthy event
+    } else {
+      showCaptureError(await detailOf(resp));
+    }
+  }
+
+  async function captureAction(path, body) {
+    let resp;
+    try {
+      resp = await fetch(path, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: body ? JSON.stringify(body) : null,
+      });
+    } catch (err) {
+      showCaptureError("request failed: " + err);
+      return;
+    }
+    if (!resp.ok) {
+      showCaptureError(await detailOf(resp));
+      pollCaptureStatus();
+      return;
+    }
+    renderCaptureStatus(await resp.json());
+  }
+
+  startNpzBtn.addEventListener("click", function () {
+    captureAction("/api/capture/start", { format: "npz" });
+  });
+  startSigmfBtn.addEventListener("click", function () {
+    captureAction("/api/capture/start", { format: "sigmf" });
+  });
+  stopBtn.addEventListener("click", function () {
+    captureAction("/api/capture/stop", null);
+  });
+  document.addEventListener("visibilitychange", function () {
+    if (document.visibilityState === "visible") pollCaptureStatus();
+  });
+  setInterval(pollCaptureStatus, STATUS_POLL_MS);
+  pollCaptureStatus();
 })();

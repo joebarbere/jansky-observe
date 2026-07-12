@@ -41,6 +41,7 @@ DATA_DIR="/var/lib/jansky-observe"
 SERVICE_USER="jansky"
 UNIT_DIR="/etc/systemd/system"
 UDEV_RULES_FILE="/etc/udev/rules.d/99-jansky-observe-sdr.rules"
+DEFAULT_FILE="/etc/default/jansky-observe"
 HEALTH_URL="http://127.0.0.1:8000/healthz"
 HEALTH_TIMEOUT=90             # seconds to wait for /healthz
 
@@ -70,13 +71,15 @@ Group=jansky
 # SDRs, but parity with the capture daemon keeps permissions unsurprising.
 SupplementaryGroups=plugdev
 Environment=JANSKY_OBSERVE_ZMQ_ENDPOINT=tcp://127.0.0.1:8410
+Environment=JANSKY_OBSERVE_CTL_ENDPOINT=tcp://127.0.0.1:8411
+Environment=JANSKY_OBSERVE_DATA_DIR=/var/lib/jansky-observe
 WorkingDirectory=/var/lib/jansky-observe
 ExecStart=/opt/jansky-observe/venv/bin/jansky-observe --host 0.0.0.0 --port 8000
 Restart=on-failure
 RestartSec=2
 
 # Hardening — deliberately stops short of PrivateDevices/DeviceAllow, which would
-# break USB SDR access when M1 swaps in the real Airspy.
+# break USB SDR access for the real Airspy source (--source airspy).
 NoNewPrivileges=true
 ProtectSystem=full
 ProtectHome=true
@@ -96,7 +99,7 @@ print_unit_capture() {
 # Installed by deploy/install.sh, which embeds an identical copy; CI diffs the two
 # (install.sh --print-unit capture) so this file and the installer can never drift.
 [Unit]
-Description=jansky-observe capture daemon (SDR owner; synthetic source at M0)
+Description=jansky-observe capture daemon (SDR owner; source set in /etc/default/jansky-observe)
 Documentation=https://github.com/joebarbere/jansky-observe
 Wants=network-online.target
 After=network-online.target
@@ -108,15 +111,21 @@ Group=jansky
 # plugdev matches the udev rules (deploy/udev/) — this is what grants USB SDR access.
 SupplementaryGroups=plugdev
 Environment=JANSKY_OBSERVE_ZMQ_ENDPOINT=tcp://127.0.0.1:8410
+Environment=JANSKY_OBSERVE_CTL_ENDPOINT=tcp://127.0.0.1:8411
+Environment=JANSKY_OBSERVE_DATA_DIR=/var/lib/jansky-observe
+# Source selection (M1, plan §10): synthetic is the safe installed default; the operator
+# switches to the real Airspy in /etc/default/jansky-observe (written by install.sh only
+# if absent), never by editing this unit. The EnvironmentFile line below overrides the
+# default above.
+Environment=JANSKY_OBSERVE_SOURCE=synthetic
+EnvironmentFile=-/etc/default/jansky-observe
 WorkingDirectory=/var/lib/jansky-observe
-# --synthetic is correct at M0 (walking skeleton, plan §10): noise + fake-HI frames,
-# no hardware. M1 (first light) swaps this flag for the real Airspy source.
-ExecStart=/opt/jansky-observe/venv/bin/jansky-observe-capture --synthetic
+ExecStart=/opt/jansky-observe/venv/bin/jansky-observe-capture --source ${JANSKY_OBSERVE_SOURCE}
 Restart=on-failure
 RestartSec=2
 
 # Hardening — deliberately stops short of PrivateDevices/DeviceAllow, which would
-# break USB SDR access when M1 swaps in the real Airspy.
+# break USB SDR access for the real Airspy source (--source airspy).
 NoNewPrivileges=true
 ProtectSystem=full
 ProtectHome=true
@@ -165,6 +174,9 @@ Usage: sudo bash install.sh [flags]
   --smoke                 Container/CI mode: skip systemd, run both processes in the
                           foreground, poll /healthz, read one live WebSocket frame
   --uninstall             Remove units/venv/udev rules; keep /var/lib/jansky-observe
+  --set-source synthetic|airspy
+                          Switch the capture source (writes /etc/default/jansky-observe,
+                          restarts the capture service) and exit — no reinstall
   --allow-unsupported-os  Skip the OS/architecture check (at your own risk)
   --print-unit server|capture   Print an embedded systemd unit (drift check; no root)
   --print-udev            Print the embedded udev rules (drift check; no root)
@@ -308,6 +320,25 @@ install_udev_rules() {
     fi
 }
 
+install_default_file() {
+    # Written ONLY if absent — re-running the installer (an in-place upgrade) must never
+    # clobber the operator's source choice.
+    if [[ -e "${DEFAULT_FILE}" ]]; then
+        log "keeping existing ${DEFAULT_FILE}"
+        return 0
+    fi
+    log "writing ${DEFAULT_FILE}"
+    install -d "$(dirname "${DEFAULT_FILE}")"
+    cat > "${DEFAULT_FILE}" <<'DEFAULT_EOF'
+# jansky-observe capture source — read by jansky-observe-capture.service.
+#
+#   synthetic  noise + fake-HI frames, no hardware (the installed default)
+#   airspy     the real Airspy Mini — switch to this at first light, then
+#              `sudo systemctl restart jansky-observe-capture`
+JANSKY_OBSERVE_SOURCE=synthetic
+DEFAULT_EOF
+}
+
 install_units() {
     log "writing systemd units to ${UNIT_DIR}"
     install -d "${UNIT_DIR}"
@@ -433,6 +464,26 @@ PY_EOF
     log "smoke test PASSED"
 }
 
+set_source() {
+    # First-light switch (and back): update /etc/default/jansky-observe in place and
+    # bounce the capture daemon. The API server (and the observation record with it)
+    # stays up throughout — the daemon is the only thing restarting.
+    local src="$1"
+    case "${src}" in
+        synthetic | airspy) ;;
+        *) die "--set-source takes 'synthetic' or 'airspy', got '${src}'" ;;
+    esac
+    install_default_file
+    sed -i "s/^JANSKY_OBSERVE_SOURCE=.*/JANSKY_OBSERVE_SOURCE=${src}/" "${DEFAULT_FILE}"
+    log "capture source set to '${src}' in ${DEFAULT_FILE}"
+    if systemd_running; then
+        systemctl restart jansky-observe-capture.service
+        log "jansky-observe-capture restarted: $(systemctl is-active jansky-observe-capture.service)"
+    else
+        warn "systemd not running — restart the capture daemon yourself"
+    fi
+}
+
 do_uninstall() {
     log "uninstalling jansky-observe (data in ${DATA_DIR} is kept)"
     if systemd_running && have systemctl; then
@@ -448,7 +499,7 @@ do_uninstall() {
     fi
     rm -rf "${PREFIX}"
     log "removed units, udev rules and ${PREFIX}."
-    log "kept: ${DATA_DIR} (observation data) and the '${SERVICE_USER}' user."
+    log "kept: ${DATA_DIR} (observation data), ${DEFAULT_FILE} (source choice) and the '${SERVICE_USER}' user."
 }
 
 # ---------------------------------------------------------------------------
@@ -457,7 +508,7 @@ do_uninstall() {
 
 main() {
     local VERSION="" WHEEL_PATH="" JANSKY_REF="${DEFAULT_JANSKY_REF}"
-    local START=1 SMOKE=0 UNINSTALL=0 ALLOW_UNSUPPORTED=0
+    local START=1 SMOKE=0 UNINSTALL=0 ALLOW_UNSUPPORTED=0 SET_SOURCE=""
     local UV=""
 
     while [[ $# -gt 0 ]]; do
@@ -468,6 +519,7 @@ main() {
             --no-start) START=0; shift ;;
             --smoke) SMOKE=1; shift ;;
             --uninstall) UNINSTALL=1; shift ;;
+            --set-source) SET_SOURCE="${2:?--set-source needs 'synthetic' or 'airspy'}"; shift 2 ;;
             --allow-unsupported-os) ALLOW_UNSUPPORTED=1; shift ;;
             # Drift-check subcommands: print embedded assets and exit (no root needed).
             --print-unit)
@@ -484,6 +536,11 @@ main() {
     done
 
     [[ "$(id -u)" -eq 0 ]] || die "must run as root (sudo bash install.sh ...)"
+
+    if [[ -n "${SET_SOURCE}" ]]; then
+        set_source "${SET_SOURCE}"
+        exit 0
+    fi
 
     if [[ "${UNINSTALL}" -eq 1 ]]; then
         do_uninstall
@@ -509,6 +566,7 @@ main() {
     install_wheel
 
     install_udev_rules
+    install_default_file
     install_units
     check_version_cli
 

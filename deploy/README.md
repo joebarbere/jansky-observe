@@ -31,9 +31,24 @@ venv but keeps the observation data in `/var/lib/jansky-observe`. See
 | `install.sh` | The one idempotent installer, shipped as a release asset: OS check, apt deps (airspy/hackrf userland, libusb), pinned uv, `/opt/jansky-observe/venv` (uv-managed Python 3.12), `jansky` from its git tag + the release wheel, udev rules, data dir + `jansky` system user, the two systemd units, health check. In a container (or with `--smoke`) it runs both processes in the foreground and reads one live WebSocket frame instead of using systemd. |
 | `OS_IMAGE` | The pinned Raspberry Pi OS Lite 64-bit image (name/date/URL/SHA-256) — the one manual assumption. Changing the pin requires re-running `make qemu-install` before the next tag. |
 | `systemd/jansky-observe.service` | API server unit (`jansky-observe --host 0.0.0.0 --port 8000`, user `jansky`). |
-| `systemd/jansky-observe-capture.service` | Capture daemon unit (`jansky-observe-capture --synthetic` at M0; M1 swaps the flag for the real Airspy). |
+| `systemd/jansky-observe-capture.service` | Capture daemon unit (`jansky-observe-capture --source ${JANSKY_OBSERVE_SOURCE}`; the source comes from `/etc/default/jansky-observe`, see Configuration). |
 | `udev/99-jansky-observe-sdr.rules` | Airspy Mini (1d50:60a1) + HackRF One (1d50:6089): mode 0660, group `plugdev`, `TAG+="uaccess"`. |
 | `qemu/run-install-test.sh` | The full-fidelity install gate (`make qemu-install`), see below. |
+
+## Configuration
+
+- **`/etc/default/jansky-observe` — the capture source switch.** `install.sh` writes it
+  **only if absent**, so re-runs (upgrades) never clobber the operator's choice.
+  `JANSKY_OBSERVE_SOURCE=synthetic` is the installed default; at first light run
+  `sudo bash install.sh --set-source airspy` (edits the file + restarts only the capture
+  daemon; `--set-source synthetic` switches back). The unit carries a `synthetic`
+  fallback, so the service runs even if the file is deleted.
+- **`JANSKY_OBSERVE_CTL_ENDPOINT`** (`tcp://127.0.0.1:8411`, set in both units) — the
+  capture daemon's ZMQ REP control channel (capture start/stop from the API server).
+- **`JANSKY_OBSERVE_DATA_DIR`** (`/var/lib/jansky-observe`, set in both units) — where
+  captures land (`captures/` inside it). Survives upgrades and `--uninstall`.
+- **`JANSKY_OBSERVE_ZMQ_ENDPOINT`** (`tcp://127.0.0.1:8410`) — the spectral-frame stream,
+  daemon → server (unchanged since M0).
 
 ## The drift-check contract
 

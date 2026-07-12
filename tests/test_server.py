@@ -1,13 +1,17 @@
-"""Tests for the FastAPI server tier: routes, Broadcaster, and the ZMQ→WS pipe."""
+"""Tests for the FastAPI server tier: routes, Broadcaster, the ZMQ→WS pipe, and the capture API."""
 
 from __future__ import annotations
 
 import asyncio
 import concurrent.futures
+import contextlib
 import json
+import socket
 import struct
 import threading
 import time
+from collections.abc import Callable, Iterator
+from typing import Any
 
 import numpy as np
 import pytest
@@ -63,6 +67,19 @@ def test_index_renders_live_page() -> None:
     assert "/static/style.css" in body
     assert "/ws/live" in body
     assert __version__ in body
+
+
+def test_index_contains_capture_panel_and_avg_controls() -> None:
+    client = TestClient(create_app(Settings(zmq_endpoint=DEAD_ENDPOINT)))
+    body = client.get("/").text
+    assert 'id="btn-start-npz"' in body
+    assert 'id="btn-start-sigmf"' in body
+    assert 'id="btn-stop"' in body
+    assert 'id="capture-state"' in body
+    assert 'id="overrun-badge"' in body
+    assert 'id="capture-error"' in body
+    assert 'id="btn-reset-avg"' in body
+    assert 'id="avg-count"' in body
 
 
 def test_static_files_served() -> None:
@@ -200,3 +217,163 @@ def test_lifespan_starts_and_stops_relay_task_cleanly() -> None:
     with TestClient(app):
         assert not app.state.relay_task.done()
     assert app.state.relay_task.done()
+
+
+# ---- capture API (fake REP daemon) ---------------------------------------------
+
+
+def _capture_status(**overrides: Any) -> dict[str, Any]:
+    """A canned daemon status reply per the control.py schema."""
+    reply: dict[str, Any] = {
+        "ok": True,
+        "capturing": False,
+        "format": None,
+        "path": None,
+        "bytes_written": 0,
+        "elapsed_s": 0.0,
+        "rate_bytes_per_s": 0.0,
+        "disk_free_bytes": 50_000_000_000,
+        "source": "synthetic",
+    }
+    reply.update(overrides)
+    return reply
+
+
+@contextlib.contextmanager
+def _fake_daemon(
+    handler: Callable[[dict[str, Any]], dict[str, Any]],
+) -> Iterator[tuple[str, list[dict[str, Any]]]]:
+    """A plain ZMQ REP socket answering control requests with ``handler(request)``.
+
+    Yields ``(endpoint, requests_seen)``.
+    """
+    ctx = zmq.Context()
+    sock = ctx.socket(zmq.REP)
+    sock.bind("tcp://127.0.0.1:*")
+    endpoint = sock.getsockopt_string(zmq.LAST_ENDPOINT)
+    requests_seen: list[dict[str, Any]] = []
+    stop = threading.Event()
+
+    def serve() -> None:
+        while not stop.is_set():
+            if sock.poll(50, zmq.POLLIN):
+                request = json.loads(sock.recv())
+                requests_seen.append(request)
+                sock.send(json.dumps(handler(request)).encode())
+
+    thread = threading.Thread(target=serve, daemon=True)
+    thread.start()
+    try:
+        yield endpoint, requests_seen
+    finally:
+        stop.set()
+        thread.join(timeout=2.0)
+        sock.close(0)
+        ctx.term()
+
+
+def _free_tcp_endpoint() -> str:
+    """A localhost TCP endpoint with nothing listening on it."""
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        return f"tcp://127.0.0.1:{s.getsockname()[1]}"
+
+
+def test_capture_status_idle_adds_disk_conveniences() -> None:
+    with _fake_daemon(lambda req: _capture_status()) as (endpoint, seen):
+        app = create_app(Settings(zmq_endpoint=DEAD_ENDPOINT, ctl_endpoint=endpoint))
+        resp = TestClient(app).get("/api/capture/status")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert seen == [{"cmd": "status"}]
+    assert body["capturing"] is False
+    assert body["disk_free_gb"] == pytest.approx(50.0)
+    assert body["hours_to_full"] is None  # idle: no write rate to project from
+    assert body["projected_gb_per_hour"] == {"npz": None, "sigmf": None}  # no frames yet
+
+
+def test_capture_status_projects_rates_from_latest_frame() -> None:
+    with _fake_daemon(lambda req: _capture_status()) as (endpoint, _):
+        app = create_app(Settings(zmq_endpoint=DEAD_ENDPOINT, ctl_endpoint=endpoint))
+
+        async def feed() -> None:
+            for seq in range(1, 4):  # _frame timestamps are 1 s apart => fps = 1.0
+                await app.state.broadcaster.publish(_frame(seq=seq))
+
+        asyncio.run(feed())
+        resp = TestClient(app).get("/api/capture/status")
+    assert resp.status_code == 200
+    proj = resp.json()["projected_gb_per_hour"]
+    # sigmf: 3 MSPS x 4 B/s (ci16_le); npz: 64 bins x 4 B x 1 fps.
+    assert proj["sigmf"] == pytest.approx(3e6 * 4 * 3600 / 1e9)
+    assert proj["npz"] == pytest.approx(64 * 4 * 1.0 * 3600 / 1e9)
+
+
+def test_capture_status_while_capturing_reports_hours_to_full() -> None:
+    status = _capture_status(
+        capturing=True,
+        format="sigmf",
+        path="/data/captures/first-light.sigmf-data",
+        bytes_written=1_200_000_000,
+        elapsed_s=100.0,
+        rate_bytes_per_s=12_000_000.0,
+        disk_free_bytes=43_200_000_000,
+        overrun=True,
+    )
+    with _fake_daemon(lambda req: status) as (endpoint, _):
+        app = create_app(Settings(zmq_endpoint=DEAD_ENDPOINT, ctl_endpoint=endpoint))
+        resp = TestClient(app).get("/api/capture/status")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["capturing"] is True
+    assert body["hours_to_full"] == pytest.approx(1.0)  # 43.2 GB free / 12 MB/s
+    assert body["overrun"] is True  # passed through untouched
+
+
+def test_capture_start_round_trip() -> None:
+    def handler(request: dict[str, Any]) -> dict[str, Any]:
+        return _capture_status(capturing=True, format=request["format"], path="/data/c.npz")
+
+    with _fake_daemon(handler) as (endpoint, seen):
+        app = create_app(Settings(zmq_endpoint=DEAD_ENDPOINT, ctl_endpoint=endpoint))
+        resp = TestClient(app).post("/api/capture/start", json={"format": "npz"})
+    assert resp.status_code == 200
+    assert seen == [{"cmd": "start_capture", "format": "npz"}]
+    body = resp.json()
+    assert body["capturing"] is True
+    assert body["format"] == "npz"
+    assert "disk_free_gb" in body  # start replies embed status + conveniences
+
+
+def test_capture_start_rejects_bad_format_with_422() -> None:
+    # Validation happens before any daemon contact, so no fake daemon needed.
+    app = create_app(Settings(zmq_endpoint=DEAD_ENDPOINT, ctl_endpoint=DEAD_ENDPOINT))
+    client = TestClient(app)
+    assert client.post("/api/capture/start", json={"format": "wav"}).status_code == 422
+    assert client.post("/api/capture/start", json={}).status_code == 422
+
+
+def test_capture_start_refusal_maps_to_409() -> None:
+    refusal = {"ok": False, "error": "already capturing"}
+    with _fake_daemon(lambda req: refusal) as (endpoint, _):
+        app = create_app(Settings(zmq_endpoint=DEAD_ENDPOINT, ctl_endpoint=endpoint))
+        resp = TestClient(app).post("/api/capture/start", json={"format": "sigmf"})
+    assert resp.status_code == 409
+    assert "already capturing" in resp.json()["detail"]
+
+
+def test_capture_stop_round_trip() -> None:
+    with _fake_daemon(lambda req: _capture_status()) as (endpoint, seen):
+        app = create_app(Settings(zmq_endpoint=DEAD_ENDPOINT, ctl_endpoint=endpoint))
+        resp = TestClient(app).post("/api/capture/stop")
+    assert resp.status_code == 200
+    assert seen == [{"cmd": "stop_capture"}]
+    assert resp.json()["capturing"] is False
+
+
+def test_capture_daemon_unreachable_maps_to_503() -> None:
+    # Nothing bound at the ctl endpoint: ctl_request times out (~2 s) → 503.
+    app = create_app(Settings(zmq_endpoint=DEAD_ENDPOINT, ctl_endpoint=_free_tcp_endpoint()))
+    resp = TestClient(app).get("/api/capture/status")
+    assert resp.status_code == 503
+    assert "did not reply" in resp.json()["detail"]
