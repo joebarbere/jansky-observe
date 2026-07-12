@@ -114,12 +114,20 @@ jansky-research plan 78** per plan §6 — the comparison harness is built once 
 consumed here. The full plan lives in `plans/jansky_observe.md` — read it before any
 feature work.
 
-**M6 (v0.7.0 "station cockpit") is in progress** — see `plans/roadmap-post-v0.6.md`. First
-piece landed: `GET /api/diagnostics` + the `get_diagnostics` MCP tool (now **18 tools**), a
-best-effort debug bundle in `server/diagnostics.py` (systemd units → SDR USB → daemon
-reachability + frame age → Pi thermals → disk → DB schema version → journal errors), each
-check degrading to `"unavailable"` off the Pi. `/troubleshoot-chain` now calls it first. Still
-to come in M6: status bar, spectrum audio, dark mode, localization, archive/soft-delete
+**M6 (v0.7.0 "station cockpit") is in progress** — see `plans/roadmap-post-v0.6.md`. Landed
+so far:
+- **Diagnostics**: `GET /api/diagnostics` + the `get_diagnostics` MCP tool (now **18 tools**),
+  a best-effort bundle in `server/diagnostics.py` (systemd units → SDR USB → daemon
+  reachability + frame age → Pi thermals → disk → DB schema version → journal errors), each
+  check degrading to `"unavailable"` off the Pi. `/troubleshoot-chain` calls it first.
+- **Status bar**: `GET /api/status_bar` + `server/status_bar.py` feed a `#cockpit-bar`
+  (`templates/_cockpit_bar.html` + `static/statusbar.js`) that rides every page (included in
+  both `base.html` and the standalone `index.html`): UTC/local clocks (client-side) + LST
+  (astropy, `pointing.local_sidereal_time_hours`, ticked at the sidereal rate between polls),
+  station chip (name + Δaz/Δel or "uncalibrated"), source badge (source + fps + stale dot),
+  ~15-min-cached weather chip, disk gauge (free + est. SigMF hours; amber<20 %/red<10 %).
+
+Still to come in M6: spectrum audio, dark mode, localization, archive/soft-delete
 (`/new-migration`), FPS knob, RFI-survey template.
 
 ## Skills & agents

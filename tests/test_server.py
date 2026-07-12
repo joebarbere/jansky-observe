@@ -56,6 +56,21 @@ def test_healthz_returns_ok_and_version() -> None:
     assert resp.json() == {"status": "ok", "version": __version__}
 
 
+def test_status_bar_route_returns_payload(tmp_path) -> None:
+    # Lifespan gives a real engine (seeded station/location → LST + station chip);
+    # the dead ctl endpoint makes the source badge unreachable, deterministically.
+    app = create_app(Settings(zmq_endpoint=DEAD_ENDPOINT, data_dir=str(tmp_path)))
+    with TestClient(app) as client:
+        resp = client.get("/api/status_bar")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert set(body) == {"server_time_utc", "lst_hours", "station", "source", "weather", "disk"}
+    assert body["station"]["name"] == "Discovery Dish"
+    assert 0.0 <= body["lst_hours"] < 24.0
+    assert body["source"]["reachable"] is False  # dead ctl endpoint
+    assert body["disk"]["status"] in {"ok", "warn", "error", "unavailable"}
+
+
 def test_diagnostics_route_returns_all_checks(tmp_path) -> None:
     # Lifespan gives the app a real engine (database check → ok); the dead ctl
     # endpoint makes the daemon check deterministically an error. The syscall
