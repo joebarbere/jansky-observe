@@ -15,6 +15,7 @@ from typing import Annotated, Any
 
 from fastapi import Depends, HTTPException, Request
 from fastapi.templating import Jinja2Templates
+from markupsafe import Markup
 from sqlmodel import Session, select
 
 from jansky_observe.astro import (
@@ -45,11 +46,20 @@ __all__ = [
 _TEMPLATES_DIR = Path(__file__).resolve().parent.parent / "templates"
 
 
-def _fmt_dt(value: datetime | None) -> str:
-    """Render a (naive-UTC-by-convention) datetime as ``YYYY-MM-DD HH:MM UTC``."""
+def _fmt_dt(value: datetime | None) -> Markup:
+    """Render a (naive-UTC-by-convention) datetime as a ``<time>`` element.
+
+    The element carries the canonical UTC instant in ``datetime`` (ISO 8601,
+    ``…Z``) and the UTC string as its text, so with JavaScript off it reads
+    ``YYYY-MM-DD HH:MM UTC``. ``static/ui.js`` rewrites every ``time.ts`` to the
+    viewer's locale/timezone (or leaves UTC) per the display preference —
+    localization is presentation-only; UTC stays canonical in the DB and exports
+    (roadmap M6)."""
     if value is None:
-        return "—"
-    return value.strftime("%Y-%m-%d %H:%M UTC")
+        return Markup("—")
+    iso = value.strftime("%Y-%m-%dT%H:%M:%SZ")
+    utc_text = value.strftime("%Y-%m-%d %H:%M UTC")
+    return Markup('<time class="ts" datetime="{}">{}</time>').format(iso, utc_text)
 
 
 TEMPLATES = Jinja2Templates(directory=str(_TEMPLATES_DIR))

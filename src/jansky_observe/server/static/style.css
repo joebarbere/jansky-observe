@@ -1,4 +1,6 @@
-/* jansky-observe live view — dark theme suited to a waterfall. */
+/* jansky-observe — theme-aware (roadmap M6). Dark is the default (a waterfall
+   reads best on black); light and OS-preference follow via the vars below.
+   The canvas reads --wf-*/--trace-* so it tracks the page theme (ui.js). */
 
 :root {
   --bg: #0b0e14;
@@ -10,6 +12,47 @@
   --ok: #37b26c;
   --warn: #e0a83a;
   --bad: #d05555;
+  /* canvas (waterfall.js reads these): backdrop, grid, labels, traces */
+  --wf-bg: #0b0e14;
+  --spec-bg: #12161f;
+  --trace-live: rgba(79, 195, 247, 0.35);
+  --trace-avg: #ffe082;
+}
+
+/* Light palette — applied when the viewer chooses light (data-theme="light")
+   or, absent an explicit choice, when the OS prefers light (media query below). */
+:root[data-theme="light"] {
+  --bg: #f6f8fb;
+  --panel: #ffffff;
+  --border: #d5dce6;
+  --text: #1b2430;
+  --muted: #5b6675;
+  --accent: #0277bd;
+  --ok: #2e9e5b;
+  --warn: #b9791f;
+  --bad: #c0392b;
+  --wf-bg: #eef1f5;
+  --spec-bg: #ffffff;
+  --trace-live: rgba(2, 119, 189, 0.35);
+  --trace-avg: #b9791f;
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme]) {
+    --bg: #f6f8fb;
+    --panel: #ffffff;
+    --border: #d5dce6;
+    --text: #1b2430;
+    --muted: #5b6675;
+    --accent: #0277bd;
+    --ok: #2e9e5b;
+    --warn: #b9791f;
+    --bad: #c0392b;
+    --wf-bg: #eef1f5;
+    --spec-bg: #ffffff;
+    --trace-live: rgba(2, 119, 189, 0.35);
+    --trace-avg: #b9791f;
+  }
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -74,6 +117,18 @@ body {
 .cb-dot.cb-ok { background: var(--ok); }
 .cb-dot.cb-warn { background: var(--warn); }
 .cb-dot.cb-bad { background: var(--bad); }
+#cockpit-bar .cb-controls { margin-left: auto; display: flex; gap: 0.4rem; }
+.cb-toggle {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  border-radius: 3px;
+  padding: 0.05rem 0.45rem;
+  font-size: 12px;
+  cursor: pointer;
+  font-family: inherit;
+}
+.cb-toggle:hover { border-color: var(--accent); color: var(--accent); }
 
 /* Archived / purged rows (roadmap M6): present but visually de-emphasised. */
 .list tr.purged td { opacity: 0.55; }

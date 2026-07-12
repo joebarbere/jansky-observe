@@ -126,9 +126,20 @@ so far:
   (astropy, `pointing.local_sidereal_time_hours`, ticked at the sidereal rate between polls),
   station chip (name + Δaz/Δel or "uncalibrated"), source badge (source + fps + stale dot),
   ~15-min-cached weather chip, disk gauge (free + est. SigMF hours; amber<20 %/red<10 %).
+- **Archive/soft-delete**: `observation.archived_at` (migration 3) + `capture.purged_at`
+  (migration 4). `POST /observations/{id}/archive|unarchive` hides from the default list AND
+  `GET /api/observations` (never over MCP; restorable; `?show_archived=1` reveals). `POST
+  /captures/{id}/purge` deletes the on-disk file(s) but keeps the row + provenance
+  (`purged_at`). All HTML-only — no new MCP verbs.
+- **Dark mode + localization**: theme is CSS-variable driven — dark default, light palette
+  under `:root[data-theme="light"]` + a `prefers-color-scheme` fallback; `static/ui.js`
+  cycles auto→light→dark (persisted, no-flash head script) and `waterfall.js` reads its
+  canvas colors from `--wf-*`/`--trace-*` so the plots track the theme. Timestamps: the `dt`
+  filter emits `<time class="ts" datetime="…Z">…UTC</time>` and `ui.js` rewrites them to the
+  viewer's locale or UTC (toggle persisted); UTC stays canonical in the DB and exports. Both
+  toggles live in the cockpit bar.
 
-Still to come in M6: spectrum audio, dark mode, localization, archive/soft-delete
-(`/new-migration`), FPS knob, RFI-survey template.
+Still to come in M6: spectrum audio, FPS knob, RFI-survey template.
 
 ## Skills & agents
 
