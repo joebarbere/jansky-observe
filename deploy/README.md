@@ -54,17 +54,21 @@ deploy copy with the matching `--print-*` command (as above, `>` instead of `dif
 ## The QEMU install gate (`make qemu-install`)
 
 Boots the **pinned genuine Raspberry Pi OS image** headless in `qemu-system-aarch64`
-(`-M virt -cpu cortex-a76`, kernel/initramfs extracted from the image, first-boot user
-pre-seeded, SSH port-forwarded to `localhost:5022`), runs the real `install.sh` in the
-guest — the true systemd path, unlike the container gate — and asserts `/healthz` +
-`--version`. If a wheel exists in `dist/` (`make build`), it gates that wheel; otherwise
-it installs the latest published release.
+(`-M virt -cpu cortex-a76`; the guest *userland* is the genuine image, while the kernel
+is a pinned Alpine netboot vmlinuz+initramfs with virtio + an ext4/vfat module graft —
+QEMU cannot run the Pi kernel itself at usable speed, see the header of
+`qemu/run-install-test.sh` for the full why), first-boot user pre-seeded, SSH
+port-forwarded to `localhost:5022`. It runs the real `install.sh` in the guest — the
+true systemd path, unlike the container gate — and asserts `/healthz` + `--version` +
+both units active. If a wheel exists in `dist/` (`make build`), it gates that wheel;
+otherwise it installs the latest published release.
 
 - **When it's required (release-blocking, plan §9):** before tagging `v0.1.0`, and
   whenever `install.sh` or the `OS_IMAGE` pin changes. Optional otherwise — too slow for
   every push. The `/release` skill checks this.
-- Host tools (Fedora): `sudo dnf install qemu-system-aarch64 qemu-img guestfs-tools
-  sshpass openssl xz`. Without guestfish it falls back to `sudo` loop mounts.
+- Host tools (Fedora): `sudo dnf install qemu-system-aarch64 qemu-img mtools
+  squashfs-tools kmod sshpass openssl xz` (guestfish works too; without either it falls
+  back to `sudo` loop mounts).
 - The image download is cached in `qemu/cache/` (gitignored); a warm run is minutes.
 - **Honest limits:** QEMU emulates the OS and userland, not Pi 5 silicon or USB. SDR
   enumeration (`airspy_rx` actually seeing the device) stays a physical checklist item on

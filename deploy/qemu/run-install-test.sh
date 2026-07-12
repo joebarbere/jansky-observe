@@ -4,40 +4,71 @@
 # Boots the PINNED genuine Raspberry Pi OS Lite 64-bit image (deploy/OS_IMAGE) headless in
 # qemu-system-aarch64 (-M virt -cpu cortex-a76, the Pi 5's core), runs the real
 # deploy/install.sh inside the guest over SSH, and asserts the same health checks the
-# installer promises (GET /healthz + `jansky-observe --version`).
+# installer promises (GET /healthz + `jansky-observe --version` + both systemd units).
+#
+# KERNEL STRATEGY (learned the hard way — do not "simplify" this back):
+# The guest USERLAND is the genuine pinned Pi OS image; the KERNEL is a stock Alpine
+# netboot vmlinuz-lts + initramfs-lts (pinned below), which boot the Pi OS rootfs via
+# root= + switch_root and bring virtio drivers with them. Why not the image's own kernel:
+#   - -M virt: the Pi kernel has no virtio and no generic-PCI host driver — virt can
+#     offer it no disk or NIC at all (initramfs: "ALERT! /dev/vda2 does not exist").
+#   - -M raspi4b: QEMU disables the 4B's PCIe (where its xhci USB host lives) and the 4B
+#     DTB puts dwc2 in peripheral mode — no usable NIC.
+#   - -M raspi3b: boots, but the Trixie 6.18 Pi kernel runs at ~1/100 real time under
+#     QEMU's board emulation (guest clock advanced ~1.4 s per 120 wall-seconds) — an
+#     install would take days. Also: a usb-net device present at boot wedges the
+#     initramfs in a USB re-enumeration loop.
+# The Alpine netboot initramfs is a plain downloadable file with virtio + ext4 modules
+# and an init that supports root= disk boot — no extraction, no root privileges needed.
 #
 # When to run (release-blocking, plan §9): REQUIRED before tagging v0.1.0 and whenever
 # deploy/install.sh or deploy/OS_IMAGE changes; optional otherwise (too slow for every push).
 #
-# HONEST LIMITS: QEMU emulates the OS and userland — the exact Debian packages, systemd,
-# udev, users, filesystem layout of the pinned image — but NOT Pi 5 silicon (BCM2712,
-# firmware boot chain) and NOT USB devices. SDR hardware smoke (airspy_rx actually
-# enumerating on the bus) stays a physical checklist item on the real Pi. We also boot the
-# image's kernel8.img directly on the `virt` machine rather than the Pi firmware path.
+# HONEST LIMITS: this gate exercises the genuine Pi OS USERLAND — the exact Debian
+# packages, systemd, udev, first-boot user seeding, filesystem layout of the pinned
+# image — but NOT the Pi kernel (stock virtio kernel instead, see above), NOT Pi 5
+# silicon (BCM2712; QEMU has no Pi 5 machine), and NOT the Pi firmware/EEPROM boot
+# chain. Real SDR USB devices are not emulated: SDR hardware smoke (airspy_rx actually
+# enumerating on the bus) stays a physical checklist item on the real Pi.
 #
 # Requirements (Fedora hints; the check below tells you what is missing):
-#   sudo dnf install qemu-system-aarch64 qemu-img guestfs-tools sshpass openssl xz
-# guestfish (libguestfs) is preferred for image surgery; without it the script falls back
-# to `sudo losetup` + loop mounts.
+#   sudo dnf install qemu-system-aarch64 qemu-img mtools sshpass openssl xz
+# guestfish (libguestfs) is preferred for image surgery; without it, mtools (rootless,
+# FAT boot partition only — sufficient) is used, then `sudo losetup` + loop mounts.
 #
 # Usage:
 #   deploy/qemu/run-install-test.sh            # download (cached), boot, install, assert
-# Env knobs: QEMU_SSH_PORT (default 5022), QEMU_MEM (2048), QEMU_SMP (4),
-#            SSH_BOOT_TIMEOUT (900 s — first boot resizes the rootfs and seeds the user).
+# Env knobs: QEMU_SSH_PORT (default 5022), QEMU_MEM (4096), QEMU_SMP (4),
+#            SSH_BOOT_TIMEOUT (900 s).
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DEPLOY_DIR="$(dirname "${SCRIPT_DIR}")"
 REPO_DIR="$(dirname "${DEPLOY_DIR}")"
-CACHE_DIR="${SCRIPT_DIR}/cache"          # gitignored; survives runs (image download is slow)
-WORK_DIR="${CACHE_DIR}/work"             # per-run scratch (enlarged image, kernel, logs)
+CACHE_DIR="${SCRIPT_DIR}/cache"          # gitignored; survives runs (downloads are slow)
+WORK_DIR="${CACHE_DIR}/work"             # per-run scratch (enlarged image, logs)
 
 QEMU_SSH_PORT="${QEMU_SSH_PORT:-5022}"
-QEMU_MEM="${QEMU_MEM:-2048}"
+QEMU_MEM="${QEMU_MEM:-4096}"
 QEMU_SMP="${QEMU_SMP:-4}"
 SSH_BOOT_TIMEOUT="${SSH_BOOT_TIMEOUT:-900}"
 DISK_SIZE="8G"
+
+# Pinned gate kernel (see KERNEL STRATEGY above). Bumping this pin is a gate-only
+# change — it does not touch what ships to the Pi — but re-run `make qemu-install`.
+GATE_KERNEL_BASE="https://dl-cdn.alpinelinux.org/alpine/v3.22/releases/aarch64/netboot"
+GATE_KERNEL_URL="${GATE_KERNEL_BASE}/vmlinuz-lts"
+GATE_INITRD_URL="${GATE_KERNEL_BASE}/initramfs-lts"
+GATE_MODLOOP_URL="${GATE_KERNEL_BASE}/modloop-lts"   # module source for the ext4 graft
+
+# Modules the Alpine initramfs must PRELOAD for the Pi OS userland. After switch_root,
+# the kernel's module autoloader (usermode modprobe) runs against Pi OS's /lib/modules —
+# which doesn't match the gate kernel — so anything the boot needs must be loaded here:
+#   ext4 (rootfs, grafted in), vfat+nls_* (the /boot/firmware mount; the Alpine kernel's
+#   FAT default iocharset is utf8 → nls_utf8, learned from "missing codepage or helper"),
+#   af_packet (modular in the Alpine kernel; DHCP needs packet sockets), virtio_net (NIC).
+GATE_PRELOAD_MODULES="ext4,vfat,nls_cp437,nls_iso8859_1,nls_utf8,af_packet,virtio_net"
 
 GUEST_USER="pi"
 # Throwaway credential for a local, NAT-only, single-run VM — not a secret.
@@ -63,9 +94,13 @@ require_tools() {
     done
     if command -v guestfish >/dev/null 2>&1; then
         IMAGE_TOOL="guestfish"
+    elif command -v mcopy >/dev/null 2>&1 && command -v sfdisk >/dev/null 2>&1; then
+        # All the surgery we need is on the FAT boot partition — mtools does it rootless.
+        echo "note: guestfish not found; using mtools on the FAT boot partition" >&2
+        IMAGE_TOOL="mtools"
     else
-        echo "note: guestfish not found (Fedora: sudo dnf install guestfs-tools);" \
-            "falling back to sudo loop mounts" >&2
+        echo "note: neither guestfish (Fedora: sudo dnf install guestfs-tools) nor mtools" \
+            "found; falling back to sudo loop mounts" >&2
         IMAGE_TOOL="loop"
         command -v losetup >/dev/null 2>&1 || { echo "missing: losetup (util-linux)" >&2; missing=1; }
     fi
@@ -73,7 +108,7 @@ require_tools() {
 }
 
 # ---------------------------------------------------------------------------
-# Pinned image: read deploy/OS_IMAGE, download + verify into the cache.
+# Pinned artifacts: OS image (deploy/OS_IMAGE) + gate kernel, cached locally.
 # ---------------------------------------------------------------------------
 
 read_os_image_pin() {
@@ -104,35 +139,91 @@ fetch_image() {
     IMAGE_XZ="${xz_path}"
 }
 
+fetch_gate_kernel() {
+    KERNEL="${CACHE_DIR}/gate-vmlinuz-lts"
+    local initrd_orig="${CACHE_DIR}/gate-initramfs-lts"
+    local modloop="${CACHE_DIR}/gate-modloop-lts"
+    INITRD="${CACHE_DIR}/gate-initramfs-ext4"
+    [[ -f "${KERNEL}" ]] || { log "downloading gate kernel"; curl -fsSL -o "${KERNEL}" "${GATE_KERNEL_URL}"; }
+    [[ -f "${initrd_orig}" ]] || { log "downloading gate initramfs"; curl -fsSL -o "${initrd_orig}" "${GATE_INITRD_URL}"; }
+    [[ -f "${INITRD}" ]] && return 0
+
+    # The netboot initramfs ships NO ext4 (it boots squashfs over the network), so a
+    # root=/dev/vda2 mount fails with "No such device". Graft ext4 + its dependency
+    # closure from the same release's modloop into an appended cpio overlay.
+    # CRITICAL: the initramfs uses kmod's modprobe, which resolves modules through the
+    # BINARY indexes (modules.dep.bin / modules.alias.bin) — patching the text
+    # modules.dep does nothing ("FATAL: Module ext4 not found in directory …", learned
+    # the hard way). So: rebuild the full module tree and re-run depmod over it, then
+    # ship the grafted .ko files plus ALL regenerated modules.* indexes in the overlay.
+    # Concatenated gzip cpio archives are valid initramfs input; later entries
+    # overwrite earlier ones.
+    command -v unsquashfs >/dev/null 2>&1 \
+        || die "unsquashfs is required to build the gate initramfs (Fedora: sudo dnf install squashfs-tools)"
+    command -v depmod >/dev/null 2>&1 \
+        || die "depmod is required to build the gate initramfs (Fedora: sudo dnf install kmod)"
+    [[ -f "${modloop}" ]] || { log "downloading gate modloop"; curl -fsSL -o "${modloop}" "${GATE_MODLOOP_URL}"; }
+    log "building ext4-capable gate initramfs"
+    local tmp="${CACHE_DIR}/initrd-build"
+    rm -rf "${tmp}"
+    mkdir -p "${tmp}/tree" "${tmp}/overlay"
+
+    # Kernel version + ext4 dependency closure, from the modloop's modules.dep.
+    unsquashfs -q -n -d "${tmp}/dep" "${modloop}" 'modules/*/modules.dep' >/dev/null
+    local kver depfile
+    kver="$(ls -1 "${tmp}/dep/modules" | head -n1)"
+    depfile="${tmp}/dep/modules/${kver}/modules.dep"
+    local depline
+    depline="$(grep -E '^kernel/fs/ext4/ext4\.ko' "${depfile}")" \
+        || die "ext4 not found in modloop modules.dep"
+    local all_mods
+    all_mods="${depline%%:*} ${depline#*:}"
+
+    # Full module tree = the original initramfs's lib/modules + the grafted modules.
+    (cd "${tmp}/tree" && zcat "${initrd_orig}" | cpio -id --quiet 'lib/modules/*')
+    [[ -d "${tmp}/tree/lib/modules/${kver}" ]] \
+        || die "gate kernel/modloop version mismatch (initramfs has no ${kver})"
+    local f extract_list=()
+    for f in ${all_mods}; do extract_list+=("modules/${kver}/${f}"); done
+    unsquashfs -q -n -d "${tmp}/mods" "${modloop}" "${extract_list[@]}" >/dev/null
+    for f in ${all_mods}; do
+        mkdir -p "${tmp}/tree/lib/modules/${kver}/$(dirname "${f}")"
+        cp "${tmp}/mods/modules/${kver}/${f}" "${tmp}/tree/lib/modules/${kver}/${f}"
+    done
+
+    # Regenerate every index over the merged tree (host depmod is arch-neutral).
+    depmod -b "${tmp}/tree" "${kver}"
+
+    # Overlay = grafted .ko files + all regenerated modules.* metadata.
+    for f in ${all_mods}; do
+        mkdir -p "${tmp}/overlay/lib/modules/${kver}/$(dirname "${f}")"
+        cp "${tmp}/tree/lib/modules/${kver}/${f}" "${tmp}/overlay/lib/modules/${kver}/${f}"
+    done
+    cp "${tmp}/tree/lib/modules/${kver}"/modules.* "${tmp}/overlay/lib/modules/${kver}/"
+
+    (cd "${tmp}/overlay" && find . -mindepth 1 | cpio -o -H newc --quiet | gzip) \
+        > "${tmp}/overlay.cpio.gz"
+    cat "${initrd_orig}" "${tmp}/overlay.cpio.gz" > "${INITRD}"
+    rm -rf "${tmp}"
+    log "gate initramfs ready: ${INITRD}"
+}
+
 prepare_disk() {
     mkdir -p "${WORK_DIR}"
+    # Clear last run's guest console up front — anything watching the log must never
+    # see stale content from a previous run (qemu only truncates it at boot time).
+    : > "${WORK_DIR}/console.log"
     DISK_IMG="${WORK_DIR}/test.img"
     log "decompressing to ${DISK_IMG}"
     xz -dc "${IMAGE_XZ}" > "${DISK_IMG}"
-    log "enlarging image to ${DISK_SIZE} (Pi OS auto-expands the rootfs on first boot)"
+    log "enlarging image to ${DISK_SIZE} (grow_rootfs expands the partition in-guest)"
     qemu-img resize -f raw "${DISK_IMG}" "${DISK_SIZE}" >/dev/null
 }
 
 # ---------------------------------------------------------------------------
-# Image surgery: pre-seed the first-boot user + SSH, extract kernel/initramfs.
-# Preferred: guestfish (no root). Fallback: loop mount with sudo.
+# Image surgery: pre-seed the first-boot user + SSH on the FAT boot partition.
+# Preferred: guestfish (no root). Then mtools (no root). Fallback: sudo loop mount.
 # ---------------------------------------------------------------------------
-
-pick_kernel_names() {
-    # Boot-partition listing (one name per line) on stdin; picks kernel8/initramfs8
-    # (4 KiB pages — the safe choice on QEMU virt) over the Pi-5-only 2712 variants.
-    local listing="$1"
-    if grep -qx 'kernel8.img' <<<"${listing}"; then
-        KERNEL_NAME="kernel8.img" INITRD_NAME="initramfs8"
-    elif grep -qx 'kernel_2712.img' <<<"${listing}"; then
-        KERNEL_NAME="kernel_2712.img" INITRD_NAME="initramfs_2712"
-    else
-        die "no kernel8.img/kernel_2712.img in the boot partition — image layout changed?"
-    fi
-    grep -qx "${INITRD_NAME}" <<<"${listing}" \
-        || die "kernel ${KERNEL_NAME} found but ${INITRD_NAME} missing in the boot partition"
-    log "using ${KERNEL_NAME} + ${INITRD_NAME}"
-}
 
 write_userconf() {
     # Raspberry Pi OS first-boot user pre-seed: userconf.txt = 'user:crypted-password',
@@ -142,46 +233,42 @@ write_userconf() {
 }
 
 surgery_guestfish() {
-    local listing
-    listing="$(guestfish --ro -a "${DISK_IMG}" -m /dev/sda1 ls /)"
-    pick_kernel_names "${listing}"
     guestfish -a "${DISK_IMG}" -m /dev/sda1 <<GF_EOF
 upload ${USERCONF_FILE} /userconf.txt
 touch /ssh
-copy-out /${KERNEL_NAME} ${WORK_DIR}
-copy-out /${INITRD_NAME} ${WORK_DIR}
 GF_EOF
+}
+
+surgery_mtools() {
+    # mtools addresses a partition inside a raw image as <file>@@<byte offset>.
+    local start spec
+    start="$(sfdisk -d "${DISK_IMG}" | sed -n 's/^[^ ]*1 : start= *\([0-9]\+\),.*/\1/p')"
+    [[ -n "${start}" ]] || die "could not find the boot-partition offset (sfdisk -d)"
+    spec="${DISK_IMG}@@$((start * 512))"
+    mcopy -o -i "${spec}" "${USERCONF_FILE}" ::/userconf.txt
+    : > "${WORK_DIR}/ssh"
+    mcopy -o -i "${spec}" "${WORK_DIR}/ssh" ::/ssh
 }
 
 surgery_loop() {
     log "loop-mount fallback needs sudo for losetup/mount"
-    local loop mnt listing
+    local loop mnt
     loop="$(sudo losetup -Pf --show "${DISK_IMG}")"
     mnt="$(mktemp -d)"
-    # shellcheck disable=SC2064
-    trap "sudo umount '${mnt}' 2>/dev/null || true; sudo losetup -d '${loop}' 2>/dev/null || true" RETURN
     sudo mount "${loop}p1" "${mnt}"
-    listing="$(ls -1 "${mnt}")"
-    pick_kernel_names "${listing}"
-    sudo cp "${mnt}/${KERNEL_NAME}" "${mnt}/${INITRD_NAME}" "${WORK_DIR}/"
-    sudo chown "$(id -u):$(id -g)" "${WORK_DIR}/${KERNEL_NAME}" "${WORK_DIR}/${INITRD_NAME}"
     sudo cp "${USERCONF_FILE}" "${mnt}/userconf.txt"
     sudo touch "${mnt}/ssh"
     sudo umount "${mnt}"
     sudo losetup -d "${loop}"
-    trap - RETURN
 }
 
 image_surgery() {
     write_userconf
-    if [[ "${IMAGE_TOOL}" == "guestfish" ]]; then
-        surgery_guestfish
-    else
-        surgery_loop
-    fi
-    KERNEL="${WORK_DIR}/${KERNEL_NAME}"
-    INITRD="${WORK_DIR}/${INITRD_NAME}"
-    [[ -f "${KERNEL}" && -f "${INITRD}" ]] || die "kernel/initramfs extraction failed"
+    case "${IMAGE_TOOL}" in
+        guestfish) surgery_guestfish ;;
+        mtools) surgery_mtools ;;
+        *) surgery_loop ;;
+    esac
 }
 
 # ---------------------------------------------------------------------------
@@ -208,15 +295,20 @@ trap cleanup EXIT
 boot_qemu() {
     CONSOLE_LOG="${WORK_DIR}/console.log"
     log "booting qemu-system-aarch64 (-M virt -cpu cortex-a76, ssh -> localhost:${QEMU_SSH_PORT})"
+    # The Alpine initramfs loads virtio_blk/virtio_net (modules= + device uevents),
+    # mounts /dev/vda2 (the Pi OS rootfs) and switch_roots into its systemd. The pl011
+    # serial console works on virt, so boot progress lands in ${CONSOLE_LOG}.
     qemu-system-aarch64 \
         -M virt -cpu cortex-a76 -smp "${QEMU_SMP}" -m "${QEMU_MEM}" \
         -kernel "${KERNEL}" -initrd "${INITRD}" \
-        -append "root=/dev/vda2 rootfstype=ext4 rw rootwait console=ttyAMA0" \
+        -append "root=/dev/vda2 rootfstype=ext4 rw modules=${GATE_PRELOAD_MODULES} console=ttyAMA0,115200" \
         -drive "if=none,file=${DISK_IMG},format=raw,id=hd0" \
-        -device virtio-blk-device,drive=hd0 \
+        -device virtio-blk-pci,drive=hd0 \
         -netdev "user,id=net0,hostfwd=tcp::${QEMU_SSH_PORT}-:22" \
-        -device virtio-net-device,netdev=net0 \
-        -display none -serial "file:${CONSOLE_LOG}" &
+        -device virtio-net-pci,netdev=net0 \
+        -display none \
+        -monitor "unix:${WORK_DIR}/monitor.sock,server,nowait" \
+        -serial "file:${CONSOLE_LOG}" &
     QEMU_PID=$!
 }
 
@@ -233,7 +325,7 @@ SSH_OPTS=(
 guest_ssh() { sshpass -p "${GUEST_PASS}" ssh "${SSH_OPTS[@]}" "${GUEST_USER}@localhost" "$@"; }
 
 wait_for_ssh() {
-    log "waiting for SSH (first boot resizes the rootfs + seeds the user; up to ${SSH_BOOT_TIMEOUT}s)"
+    log "waiting for SSH (first boot seeds the user + host keys; up to ${SSH_BOOT_TIMEOUT}s)"
     local waited=0
     until guest_ssh true 2>/dev/null; do
         kill -0 "${QEMU_PID}" 2>/dev/null || die "QEMU exited early — see ${CONSOLE_LOG}"
@@ -243,6 +335,31 @@ wait_for_ssh() {
             || die "SSH never came up after ${SSH_BOOT_TIMEOUT}s — see ${CONSOLE_LOG}"
     done
     log "SSH is up after ~${waited}s"
+}
+
+enable_passwordless_sudo() {
+    # The Trixie image's first-boot user does NOT get NOPASSWD sudo, and our SSH
+    # commands have no TTY for a sudo password prompt. Bootstrap NOPASSWD once via
+    # `sudo -S` (password on stdin); everything after this uses plain sudo.
+    log "enabling passwordless sudo for ${GUEST_USER} in the guest"
+    printf '%s\n' "${GUEST_PASS}" | guest_ssh \
+        "sudo -S -p '' sh -c 'echo \"${GUEST_USER} ALL=(ALL) NOPASSWD: ALL\" > /etc/sudoers.d/99-qemu-gate && chmod 440 /etc/sudoers.d/99-qemu-gate'"
+    guest_ssh sudo -n true || die "passwordless sudo bootstrap failed"
+}
+
+grow_rootfs() {
+    # We bypass Pi OS's cmdline.txt first-boot resize hook (init=…/init_resize.sh) by
+    # booting the gate kernel directly, so the rootfs would stay at image size (~2.7 GB)
+    # — not enough for the venv. Grow partition 2 + ext4 online instead, deriving the
+    # disk from wherever / is actually mounted (vda2, mmcblk0p2, sda2, …).
+    log "growing the root partition to fill the ${DISK_SIZE} disk"
+    guest_ssh 'set -e
+        root_src="$(findmnt -no SOURCE /)"
+        disk="${root_src%2}"; disk="${disk%p}"
+        echo ", +" | sudo sfdisk -N 2 --no-reread --force "${disk}" >/dev/null 2>&1 || true
+        sudo partx -u "${disk}" 2>/dev/null || true
+        sudo resize2fs "${root_src}"
+        df -h --output=size,avail / | tail -1'
 }
 
 run_install_in_guest() {
@@ -277,10 +394,13 @@ main() {
     require_tools
     read_os_image_pin
     fetch_image
+    fetch_gate_kernel
     prepare_disk
     image_surgery
     boot_qemu
     wait_for_ssh
+    enable_passwordless_sudo
+    grow_rootfs
     run_install_in_guest
     assert_health
     log "RESULT: PASS — install.sh works on the pinned image (${OS_IMAGE_NAME})"
