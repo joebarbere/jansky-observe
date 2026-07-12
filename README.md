@@ -28,10 +28,13 @@ flowchart LR
 
 ## Status
 
-**M3 — confirmation — shipped:** the deterministic `hline_v1` classifier, LSR spectral axes,
-and the live HI badge — on top of M2's observation records (checklists, session wizard, MCP
-surface), M1's first light (real Airspy, live waterfall, captures to `.npz`/SigMF), and M0's
-full CI/release/install pipeline. **M4 — reports & photos — is in progress.**
+**Feature-complete (M0–M5 all shipped):** capture (synthetic + real Airspy), observation
+records + session wizard + observing ladder, the `hline_v1` classifier with live HI badge and
+LSR axes, PDF reports + photos + Virgo/ezRA exporters, Stellarium cross-check, HackRF RFI
+sweep, gpsd locations, and a 17-tool MCP surface. **`v1.0.0` is not a feature** — it is tagged
+after one real end-to-end observing campaign (plan → observe → confirm → PDF). See
+`CHANGES.md` for the full version history and `plans/roadmap-post-v0.6.md` for what comes
+after.
 
 | Tag | Milestone | Release means | |
 |---|---|---|---|
