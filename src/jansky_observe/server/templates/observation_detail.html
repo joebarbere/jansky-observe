@@ -95,12 +95,15 @@
   <h2>Captures</h2>
   {% if captures %}
   <table class="list">
-    <tr><th>device</th><th>format</th><th>file</th><th>size</th><th>start</th><th>end</th></tr>
+    <tr><th>device</th><th>format</th><th>file</th><th>size</th><th>start</th><th>end</th><th>confirmation</th></tr>
     {% for c in captures %}
     <tr>
       <td>{{ c.device }}</td><td>{{ c.format }}</td><td>{{ c.path }}</td>
       <td>{{ "%.1f"|format(c.size_bytes / 1e6) }} MB</td>
       <td>{{ c.start | dt }}</td><td>{{ c.end | dt }}</td>
+      <td id="cap-confirm-{{ c.id }}">
+        {% with capture = c, results = capture_results.get(c.id, []) %}{% include "_capture_results.html" %}{% endwith %}
+      </td>
     </tr>
     {% endfor %}
   </table>

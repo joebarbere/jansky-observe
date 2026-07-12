@@ -100,6 +100,43 @@ def build_mcp(app: FastAPI) -> FastMCP:
         return await _get(app, "/api/capture/status")
 
     @mcp.tool
+    async def get_capture_meta(capture_id: int) -> dict[str, Any]:
+        """One capture's metadata: file path, format, device, size, start/end
+        times, full SDR settings, and the linked observation id (if any)."""
+        return await _get(app, f"/api/captures/{capture_id}")
+
+    @mcp.tool
+    async def get_spectrum(capture_id: int, axis: str = "mhz") -> dict[str, Any]:
+        """A capture's averaged spectrum: {axis, power_db, axis_kind}. axis is
+        "mhz" (topocentric) or "vlsr" (km/s) — vlsr needs the capture linked to
+        an observation (pointing + location + time) and errors 409 otherwise.
+        Spectra exist for npz_spectra captures only (raw SigMF: 409)."""
+        return await _get(app, f"/api/captures/{capture_id}/spectrum", axis=axis)
+
+    @mcp.tool
+    async def run_classifier(capture_id: int) -> dict[str, Any]:
+        """Run the deterministic hline_v1 classifier on an npz_spectra capture.
+        Appends a ClassifierResult row (name+version+params) and renders the
+        verdict plot. Provenance rule (plan §12.5): detection verdicts come ONLY
+        from this deterministic classifier — never assert a detection yourself;
+        run this, then interpret the recorded result in notes."""
+        return await _post_json(app, f"/api/captures/{capture_id}/classify", {})
+
+    @mcp.tool
+    async def get_hi_badge() -> dict[str, Any]:
+        """The live "am I seeing it?" badge: running verdict + SNR on the
+        server's accumulating average, with the Doppler window source (lsr when
+        an observation is running, else fixed) and peak v_LSR when available."""
+        return await _get(app, "/api/live/hi_badge")
+
+    @mcp.tool
+    async def reset_hi_badge() -> dict[str, Any]:
+        """Reset the live badge's accumulating average — a safe verb: it clears
+        only the in-memory live accumulator (e.g. after re-pointing the dish);
+        no file, capture, or database row is touched."""
+        return await _post_json(app, "/api/live/hi_badge/reset", {})
+
+    @mcp.tool
     async def create_observation_draft(
         observation_type: str,
         source: str,

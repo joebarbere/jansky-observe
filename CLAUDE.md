@@ -56,7 +56,11 @@ If a change seems to require enabling the internal bias tee, it's wrong — stop
   - `db.py` — SQLite engine + forward-migration-on-start (`MIGRATIONS` on
     `PRAGMA user_version`; change schema only via `/new-migration`)
   - `seeds.py` — seed data: source list + the observing-ladder ObservationTypes (plan §5.4)
-  - `astro/` — astropy pointing: az/el, transit, drift rate, beam-crossing (`pointing.py`)
+  - `astro/` — astropy pointing + spectral axes: az/el, transit, drift rate, beam-crossing
+    (`pointing.py`); topocentric ↔ v_LSR conversion and the Doppler window (`lsr.py`)
+  - `confirm/` — the deterministic spectrum classifiers (plan §6): v1 `hline_v1`
+    (baseline fit → peak search in the LSR Doppler window → SNR verdict 5/2 thresholds);
+    v2 `hi4pi_xcheck` is deferred to jansky-research plan 78 (harness built once there)
   - `weather/` — `WeatherProvider` protocol: NWS primary, Open-Meteo fallback
   - `frames.py` — spectral-frame wire formats shared by daemon and server (ZMQ + WebSocket)
   - `control.py` — the ZMQ REP control channel (capture start/stop, daemon ↔ server)
@@ -90,12 +94,15 @@ nothing by design.
 
 ## Current status
 
-M0 (walking skeleton + pipeline) and M1 (first light: real Airspy, capture writers, control
-channel) have shipped — `v0.2.0`. **M2 (observation records) is in progress on
-`m2/observation-records`:** the SQLModel data model + forward migrations (`models.py`,
-`db.py`, `seeds.py`), astropy pointing (`astro/`) + weather (`weather/`), CRUD + the session
-wizard, and the MCP surface mounted at `/mcp` on the API server. **M3 (confirmation) is
-next.** The full plan lives in `plans/jansky_observe.md` — read it before any feature work.
+M0–M2 have shipped — `v0.3.0` (observation records, checklists, session wizard, the MCP
+surface at `/mcp`). **M3 (confirmation) is in progress on `m3/confirmation`:** the v1
+rule-based classifier (`confirm/`, classifier name `hline_v1`), LSR spectral axes
+(`astro/lsr.py`), the live HI badge (running SNR on the server's accumulating average),
+classify/spectrum endpoints, and three new MCP tools (`run_classifier`, `get_spectrum`,
+`get_capture_meta`). The HI4PI cross-check (`hi4pi_xcheck`, v2) is **deferred to
+jansky-research plan 78** per plan §6 — the comparison harness is built once there and
+consumed here. The full plan lives in `plans/jansky_observe.md` — read it before any
+feature work.
 
 ## Skills & agents
 
@@ -110,6 +117,17 @@ next.** The full plan lives in `plans/jansky_observe.md` — read it before any 
   bias-tee states *checked never changed* → gain → USB → daemon → frequency → tinySA).
 - `/new-migration` — scaffold a forward migration: the next `(N, callable)` in
   `db.py`'s `MIGRATIONS`, the matching `models.py` change, and the round-trip test.
+- `/observing-copilot` — the during-session companion: live status + the HI badge (SNR
+  trend), drift warnings (nudge at ~10° ≈ half the 21° beam, minutes-to-nudge from the
+  drift rate), RFI-vs-line judgment, timestamped notes on request.
+- `/analyze-observation` — post-session: run `hline_v1` over every `.npz` capture, fetch
+  v_LSR spectra, interpret (baseline, SNR, velocity plausibility, RFI), write an analysis
+  note whose claims cite `ClassifierResult` rows (provenance rule, plan §12.5).
+- `hi-data-analyst` (agent) — the analyst persona: station numbers, 21 cm physics, the v1
+  classifier's exact semantics, and the wrong-spectrum suspect order (RFI → baseline ripple →
+  frequency cal → pointing) baked in.
+- `dsp-reviewer` (agent) — read-only review of diffs touching `capture/dsp.py`, `astro/`, or
+  `confirm/`: plan-number checks plus the classic unit bugs (topocentric vs LSR, Hz vs km/s,
+  10 vs 20·log10, fftshift, int16 scaling, Welch normalization, Doppler conventions).
 
-More arrive with the milestones per plan §12.6: `/observing-copilot`, `/analyze-observation`,
-`hi-data-analyst`, `dsp-reviewer` at M3; `/write-up`, `/compare-observations` at M4.
+More arrive with the milestones per plan §12.6: `/write-up`, `/compare-observations` at M4.

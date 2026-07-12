@@ -66,6 +66,20 @@ body {
   font-weight: 700;
 }
 
+/* ---- HI badge ("am I seeing it?", plan §5.2) ----------------------------- */
+
+.badge.hi-accum { background: var(--muted); }
+.badge.hi-detected { background: var(--ok); font-weight: 700; }
+.badge.hi-uncertain { background: var(--warn); }
+.badge.hi-none { background: var(--panel); color: var(--muted); }
+
+#hi-badge-reset {
+  color: var(--muted);
+  font-size: 11px;
+  text-decoration: none;
+}
+#hi-badge-reset:hover { color: var(--accent); }
+
 /* ---- capture panel ------------------------------------------------------ */
 
 #capture-panel {
@@ -245,6 +259,13 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--accent); }
 .badge.running { background: var(--ok); }
 .badge.done { background: var(--accent); }
 .badge.aborted { background: var(--bad); }
+
+/* classifier verdicts on the captures table (plan §6) */
+.badge.detected { background: var(--ok); }
+.badge.uncertain { background: var(--warn); }
+.badge.not_detected { background: var(--panel); color: var(--muted); }
+.cap-result { padding: 0.1rem 0; white-space: nowrap; }
+.cap-result .muted { font-size: 11px; }
 
 .checklist { list-style: none; }
 .checklist li { padding: 0.3rem 0; border-bottom: 1px solid var(--border); }

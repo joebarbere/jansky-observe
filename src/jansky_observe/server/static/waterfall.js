@@ -8,6 +8,8 @@
  *
  * The capture panel polls /api/capture/status (~2 s, only while the page is
  * visible) and drives /api/capture/start|stop; 409/503 surface as a banner.
+ * The HI badge chip polls /api/live/hi_badge (~3 s, visible page only): the
+ * server-side accumulating average's running verdict + SNR (plan §5.2).
  */
 "use strict";
 
@@ -40,6 +42,8 @@
   const capRateEl = document.getElementById("cap-rate");
   const capDiskEl = document.getElementById("cap-disk");
   const capErrorEl = document.getElementById("capture-error");
+  const hiBadgeEl = document.getElementById("hi-badge");
+  const hiResetEl = document.getElementById("hi-badge-reset");
 
   // ---- constants -------------------------------------------------------
   const HISTORY_ROWS = 320; // waterfall depth (frames)
@@ -48,6 +52,7 @@
   const STALE_MS = 3000; // no frame for this long => "waiting" state
   const MAX_BACKOFF_MS = 8000;
   const STATUS_POLL_MS = 2000; // capture-status poll period (visible page only)
+  const HI_BADGE_POLL_MS = 3000; // HI badge poll period (visible page only)
   const HOT_GB_PER_HOUR = 10; // amber-highlight threshold for projected rates
   const ERROR_HIDE_MS = 8000; // action-error banner auto-hide
 
@@ -515,9 +520,69 @@
   stopBtn.addEventListener("click", function () {
     captureAction("/api/capture/stop", null);
   });
+  // ---- HI badge (plan §5.2: "am I seeing it?") ------------------------------
+  function renderHiBadge(b) {
+    let cls = "hi-accum";
+    let text = "HI –";
+    let tip = "";
+    if (b.status === "accumulating") {
+      text = "accumulating (" + (b.n_frames || 0) + ")";
+    } else if (b.status === "ok") {
+      const snr = b.snr != null ? b.snr.toFixed(1) : "–";
+      if (b.verdict === "detected") {
+        cls = "hi-detected";
+        text = "HI DETECTED — SNR " + snr;
+      } else if (b.verdict === "uncertain") {
+        cls = "hi-uncertain";
+        text = "uncertain — SNR " + snr;
+      } else {
+        cls = "hi-none";
+        text = "not detected — SNR " + snr;
+      }
+      tip = "window: " + b.window_source;
+      if (b.peak_vlsr_kms != null) {
+        tip += " · peak v_LSR " + b.peak_vlsr_kms.toFixed(1) + " km/s";
+      }
+    } else {
+      cls = "hi-none";
+      text = "HI badge unavailable";
+      tip = b.detail || "";
+    }
+    hiBadgeEl.className = "badge " + cls;
+    hiBadgeEl.textContent = text;
+    hiBadgeEl.title = tip;
+  }
+
+  async function pollHiBadge() {
+    if (document.visibilityState !== "visible") return;
+    let resp;
+    try {
+      resp = await fetch("/api/live/hi_badge");
+    } catch (err) {
+      return; // server unreachable; the connection badge covers it
+    }
+    if (resp.ok) renderHiBadge(await resp.json());
+  }
+
+  hiResetEl.addEventListener("click", async function (ev) {
+    ev.preventDefault();
+    try {
+      const resp = await fetch("/api/live/hi_badge/reset", { method: "POST" });
+      if (resp.ok) renderHiBadge(await resp.json());
+    } catch (err) {
+      /* next poll recovers */
+    }
+    pollHiBadge();
+  });
+
   document.addEventListener("visibilitychange", function () {
-    if (document.visibilityState === "visible") pollCaptureStatus();
+    if (document.visibilityState === "visible") {
+      pollCaptureStatus();
+      pollHiBadge();
+    }
   });
   setInterval(pollCaptureStatus, STATUS_POLL_MS);
+  setInterval(pollHiBadge, HI_BADGE_POLL_MS);
   pollCaptureStatus();
+  pollHiBadge();
 })();

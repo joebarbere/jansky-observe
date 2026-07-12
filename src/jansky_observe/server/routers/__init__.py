@@ -31,6 +31,7 @@ from jansky_observe.weather import get_weather
 __all__ = [
     "SessionDep",
     "TEMPLATES",
+    "captures",
     "db_session",
     "default_location",
     "default_station",
@@ -230,3 +231,7 @@ def weather_or_none(lat: float, lon: float, hours: int = 3) -> dict[str, Any] | 
         return get_weather(lat, lon, hours=hours)
     except Exception:  # noqa: BLE001 — weather is advisory; degrade, never block
         return None
+
+
+# Exported last: the submodule imports the shared plumbing defined above.
+from jansky_observe.server.routers import captures as captures  # noqa: E402
