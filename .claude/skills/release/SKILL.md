@@ -25,6 +25,9 @@ release. Semver is pre-1.0: **minor = milestone, patch = fixes between milestone
   (`__version__`) — they must match the tag.
 - Release notes gathered: skim `git log <last-tag>..HEAD` for the CHANGELOG-worthy items
   (the workflow auto-generates notes; make sure the log tells the story).
+- `CHANGES.md` has a section for this version (newest first, mapped to its milestone or a
+  brief no-milestone summary). It ships inside the release, so it must be written *before*
+  tagging, in the same PR as the version bump.
 
 ## 1. QEMU gate — required if the install path changed
 

@@ -30,7 +30,7 @@ set -euo pipefail
 
 UV_VERSION="0.11.28"          # pinned uv (installed to /usr/local/bin if absent)
 PYTHON_VERSION="3.12"         # uv-managed interpreter for the venv (Trixie's system python is 3.13)
-DEFAULT_JANSKY_REF="v0.1.0"   # jansky is NOT on PyPI; installed from its git tag first
+DEFAULT_JANSKY_REF="v0.2.0"   # jansky is NOT on PyPI; installed from its git tag first
 
 REPO="joebarbere/jansky-observe"
 JANSKY_GIT_URL="https://github.com/joebarbere/jansky"
@@ -171,7 +171,7 @@ Usage: sudo bash install.sh [flags]
 
   --version vX.Y.Z        Release to install (default: latest GitHub release)
   --wheel <path>          Install a local wheel instead of downloading (CI install gate)
-  --jansky-ref <tag>      Git ref of the jansky library dependency (default: v0.1.0)
+  --jansky-ref <tag>      Git ref of the jansky library dependency (default: v0.2.0)
   --no-start              Install and enable, but do not start the services
   --smoke                 Container/CI mode: skip systemd, run both processes in the
                           foreground, poll /healthz, read one live WebSocket frame
