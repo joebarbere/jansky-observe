@@ -171,7 +171,12 @@ Landed so far:
   epoch. `server/routers/calibration.py`: a `/calibration` page + `POST /calibration/epochs` +
   `GET /api/calibration_epochs`. Cal provenance surfaces in the capture meta (kind +
   cal_epoch_id), the calibration API, and the PDF report (a Calibration section + per-capture
-  kind). Still to come in M7: scheduler + session timer, drift-scan campaign mode, sky chart.
+  kind).
+- **Sky chart**: a `/sky` canvas alt/az plot (`static/skychart.js`) fed by `GET /api/sky_chart`
+  — catalog sources (station offsets applied), Sun, Moon, the galactic plane, and the beam
+  cone at a running session's dialed pointing. Positions from `astro/skychart.py` (pure
+  astropy, offline); nav link "Sky". Still to come in M7: scheduler + session timer,
+  drift-scan campaign mode.
 
 ## Skills & agents
 

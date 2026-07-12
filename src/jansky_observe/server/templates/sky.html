@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}sky — jansky-observe{% endblock %}
+{% block content %}
+<h1>Sky</h1>
+<p class="muted">
+  Alt/az view of what's up now — catalog sources, Sun, Moon, the galactic plane, and (while a
+  session runs) the dish's 21° beam. Zenith is centre, the horizon is the rim; N is up, E is
+  left (as seen looking up). Computed offline with astropy, station offsets applied.
+</p>
+<div id="skychart-wrap">
+  <canvas id="skychart"></canvas>
+  <p id="sky-meta" class="muted"></p>
+</div>
+<script src="/static/skychart.js" defer></script>
+{% endblock %}

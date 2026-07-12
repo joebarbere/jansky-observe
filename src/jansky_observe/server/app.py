@@ -50,6 +50,7 @@ from jansky_observe.server.routers import (
     observations,
     photos,
     reports,
+    sky,
     wizard,
 )
 from jansky_observe.server.routers.captures import register_stopped_capture
@@ -288,6 +289,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
     application.include_router(wizard.router)
     application.include_router(captures_router)
     application.include_router(calibration.router)
+    application.include_router(sky.router)
     application.include_router(photos.router)
     application.include_router(reports.router)
     # The MCP surface (plan §12.4): Claude as a console peer of the browser UI.

@@ -121,6 +121,25 @@ body {
 .list tr.purged td { opacity: 0.55; }
 .list.archived td { color: var(--muted); }
 
+/* Sky chart (roadmap M7). */
+#skychart-wrap { max-width: 560px; }
+#skychart {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+.inline-kind { display: inline; }
+.inline-kind select {
+  background: var(--border);
+  color: var(--text);
+  border: 1px solid var(--muted);
+  border-radius: 3px;
+  font-family: inherit;
+  font-size: 12px;
+}
+
 .badge {
   padding: 0.1rem 0.55rem;
   border-radius: 3px;
