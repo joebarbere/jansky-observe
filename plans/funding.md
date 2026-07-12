@@ -30,7 +30,8 @@ not the profile in general. Goal: a small revenue stream funding further station
 ## Step 2 — wire the repos (Claude does this once accounts exist)
 
 **Done 2026-07-12** — FUNDING.yml + README support sections landed in all three repos;
-the GitHub profile README carries the same pitch.
+the GitHub profile README carries the same pitch. Same day: Sponsors + Ko-fi badges added
+at the top of all three repo READMEs and the profile README (links stay at the bottom too).
 
 - `.github/FUNDING.yml` in **jansky, jansky-observe, jansky-research**:
 
@@ -55,13 +56,21 @@ Philadelphia — software, science, and build guides all public.* Elements that 
   monitor).
 - **Concrete, itemized goals** — hardware wishlist tied to what each unlocks (goals with
   numbers convert far better than a bare tip jar). Current buildout list, roughly
-  ascending:
-  - Pi 5 Active Cooler — removes the thermal soft-limit hit during 3 MSPS streaming.
+  ascending (updated 2026-07-12: the Pi 5 Active Cooler came off the list — an Argon ONE
+  V2 case with built-in cooling was purchased instead; and with the milestones re-ordered,
+  the rotator now sits at M9/v1.1.0, *after* the v1.0.0 campaign gate):
   - Storage for IQ captures (SigMF runs 43 GB/h) — longer confirmation-grade recordings.
-  - **Discovery Drive rotator** — automated pointing + tracking (roadmap M9).
+  - Rooftop networking — a PoE switch + access point, so the station stops depending on
+    the house Wi-Fi reaching the roof.
+  - **Discovery Drive rotator** — automated pointing + tracking (roadmap M9, v1.1.0).
   - Second Discovery Dish — the jansky-research plan 83 solar interferometer / Dicke
     reference for the plan-79 Doppler year.
   - KrakenSDR — 5-channel *coherent* receiver, the real interferometry path.
+- **Honesty in the pitch, everywhere it appears**: the wishlist is a *general direction*,
+  not a promise — the roadmap and the observing plans can and will change as the station
+  meets the real sky. Smaller spends (test equipment, and the coffee behind the long
+  Claude coding sessions) are also fair uses of support and are said out loud in the
+  "where the money goes" framing — coffee stays out of the wishlist itself.
 - Sponsor tiers: keep it simple — $3 (thanks + name in SUPPORTERS.md), $10 (same + input
   on the observing queue / guide requests), $25 (early access to build-guide PDFs — the
   M8 deliverable becomes a perk for free). One-time enabled.

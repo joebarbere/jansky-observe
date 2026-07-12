@@ -8,14 +8,16 @@
 # or download-inspect-run:
 #
 #   sudo bash install.sh [--version vX.Y.Z] [--wheel path.whl] [--jansky-ref vX.Y.Z]
-#                        [--no-start] [--smoke] [--uninstall] [--allow-unsupported-os]
+#                        [--no-start] [--smoke] [--uninstall] [--reset-data [--yes]]
+#                        [--allow-unsupported-os]
 #
 # Supported base: Raspberry Pi OS Lite 64-bit, Debian 13 "Trixie", aarch64 — the ONE manual
 # prerequisite (plan §9). The exact supported image is pinned in deploy/OS_IMAGE. Anything else
 # is refused rather than half-installed, unless --allow-unsupported-os.
 #
 # Re-running is an in-place upgrade. --uninstall removes the units/venv/udev rules but keeps
-# the observation data in /var/lib/jansky-observe.
+# the observation data in /var/lib/jansky-observe. --reset-data is the opposite: it keeps the
+# install but wipes the observation data (QA / clean install — see README).
 #
 # The systemd units and udev rules are EMBEDDED below as heredocs so this script is standalone.
 # The copies in deploy/systemd/ and deploy/udev/ are the same bytes; CI enforces that with:
@@ -176,6 +178,12 @@ Usage: sudo bash install.sh [flags]
   --smoke                 Container/CI mode: skip systemd, run both processes in the
                           foreground, poll /healthz, read one live WebSocket frame
   --uninstall             Remove units/venv/udev rules; keep /var/lib/jansky-observe
+  --reset-data            QA / clean install: stop the services, delete EVERYTHING in
+                          /var/lib/jansky-observe (observations, captures, photos,
+                          reports), restart fresh (migrations + seeds rebuild the DB)
+                          and exit. Asks for confirmation on a TTY; needs --yes without
+                          one (e.g. curl | sudo bash -s -- --reset-data --yes)
+  --yes                   Skip the --reset-data confirmation prompt
   --set-source synthetic|airspy
                           Switch the capture source (writes /etc/default/jansky-observe,
                           restarts the capture service) and exit — no reinstall
@@ -486,6 +494,37 @@ set_source() {
     fi
 }
 
+do_reset_data() {
+    # QA / clean-install reset (README "Resetting station data"): delete ALL station
+    # data — DB, captures, photos, reports — and let migrations + seeds rebuild a
+    # fresh station on the next start. Deliberately all-or-nothing: there is no
+    # per-observation delete anywhere (an observing log you can edit selectively
+    # isn't a log; the MCP surface carries no delete verbs either — plan §12.4).
+    [[ -d "${DATA_DIR}" ]] || die "${DATA_DIR} does not exist — nothing to reset"
+    if [[ "${ASSUME_YES}" -ne 1 ]]; then
+        [[ -t 0 ]] || die "--reset-data is destructive and stdin is not a TTY — re-run with --yes to confirm"
+        local reply
+        printf 'This permanently deletes ALL observations, captures, photos and reports in %s.\n' "${DATA_DIR}" >&2
+        read -r -p "Type 'reset' to confirm: " reply
+        [[ "${reply}" == "reset" ]] || die "not confirmed — nothing was deleted"
+    fi
+    local restart=0
+    if systemd_running && have systemctl; then
+        log "stopping services"
+        systemctl stop jansky-observe.service jansky-observe-capture.service 2>/dev/null || true
+        restart=1
+    fi
+    log "deleting the contents of ${DATA_DIR}"
+    find "${DATA_DIR}" -mindepth 1 -delete
+    if [[ "${restart}" -eq 1 ]]; then
+        log "restarting services (a fresh DB is migrated + seeded on start)"
+        systemctl start jansky-observe-capture.service jansky-observe.service
+        wait_healthz \
+            || die "health check failed after reset — see: journalctl -u jansky-observe -u jansky-observe-capture"
+    fi
+    log "station data reset — ${DATA_DIR} is fresh"
+}
+
 do_uninstall() {
     log "uninstalling jansky-observe (data in ${DATA_DIR} is kept)"
     if systemd_running && have systemctl; then
@@ -511,6 +550,7 @@ do_uninstall() {
 main() {
     local VERSION="" WHEEL_PATH="" JANSKY_REF="${DEFAULT_JANSKY_REF}"
     local START=1 SMOKE=0 UNINSTALL=0 ALLOW_UNSUPPORTED=0 SET_SOURCE=""
+    local RESET_DATA=0 ASSUME_YES=0
     local UV=""
 
     while [[ $# -gt 0 ]]; do
@@ -521,6 +561,8 @@ main() {
             --no-start) START=0; shift ;;
             --smoke) SMOKE=1; shift ;;
             --uninstall) UNINSTALL=1; shift ;;
+            --reset-data) RESET_DATA=1; shift ;;
+            --yes) ASSUME_YES=1; shift ;;
             --set-source) SET_SOURCE="${2:?--set-source needs 'synthetic' or 'airspy'}"; shift 2 ;;
             --allow-unsupported-os) ALLOW_UNSUPPORTED=1; shift ;;
             # Drift-check subcommands: print embedded assets and exit (no root needed).
@@ -541,6 +583,11 @@ main() {
 
     if [[ -n "${SET_SOURCE}" ]]; then
         set_source "${SET_SOURCE}"
+        exit 0
+    fi
+
+    if [[ "${RESET_DATA}" -eq 1 ]]; then
+        do_reset_data
         exit 0
     fi
 
