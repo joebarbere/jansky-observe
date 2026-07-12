@@ -56,6 +56,23 @@ def test_healthz_returns_ok_and_version() -> None:
     assert resp.json() == {"status": "ok", "version": __version__}
 
 
+def test_diagnostics_route_returns_all_checks(tmp_path) -> None:
+    # Lifespan gives the app a real engine (database check → ok); the dead ctl
+    # endpoint makes the daemon check deterministically an error. The syscall
+    # checks are environment-dependent, so only their presence is asserted.
+    app = create_app(Settings(zmq_endpoint=DEAD_ENDPOINT, data_dir=str(tmp_path)))
+    with TestClient(app) as client:
+        resp = client.get("/api/diagnostics")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["version"]
+    checks = body["checks"]
+    assert set(checks) == {"systemd", "usb", "daemon", "thermals", "disk", "database", "journal"}
+    assert all("status" in c for c in checks.values())
+    assert checks["database"]["status"] == "ok"
+    assert checks["daemon"]["status"] == "error"
+
+
 def test_index_renders_live_page() -> None:
     client = TestClient(create_app(Settings(zmq_endpoint=DEAD_ENDPOINT)))
     resp = client.get("/")

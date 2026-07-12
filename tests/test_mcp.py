@@ -87,6 +87,7 @@ def test_tool_surface_has_no_forbidden_verbs(tmp_path):
         "create_observation_draft",
         "export_capture",
         "get_capture_meta",
+        "get_diagnostics",
         "get_hi_badge",
         "get_live_status",
         "get_observation",
@@ -160,6 +161,27 @@ def test_draft_note_tick_round_trip(tmp_path):
             assert ticked_item["checked"] and ticked_item["checked_by"] == "claude"
 
     asyncio.run(scenario())
+
+
+def test_get_diagnostics_returns_all_checks(tmp_path):
+    mcp = build_mcp(_app(tmp_path))
+
+    async def scenario():
+        async with Client(mcp) as client:
+            return _payload(await client.call_tool("get_diagnostics", {}))
+
+    bundle = asyncio.run(scenario())
+    assert set(bundle["checks"]) == {
+        "systemd",
+        "usb",
+        "daemon",
+        "thermals",
+        "disk",
+        "database",
+        "journal",
+    }
+    # The seeded app has a real engine → the schema check is authoritative.
+    assert bundle["checks"]["database"]["status"] == "ok"
 
 
 def test_draft_unknown_type_names_known_types(tmp_path):

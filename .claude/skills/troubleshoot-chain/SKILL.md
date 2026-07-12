@@ -1,6 +1,6 @@
 ---
 name: troubleshoot-chain
-description: The no-signal decision tree for the RF chain, in strict order — feed injector current, bias-tee states (checked, never changed), gain ladder, USB enumeration, daemon status, frequency sanity, tinySA bench fallback — each step saying what to observe and what the result implicates. Use when the waterfall is flat, the noise floor looks wrong, or the line that should be there isn't. Ends by writing the findings into the observation.
+description: The no-signal decision tree for the RF chain, in strict order — a one-call diagnostics bundle first, then feed injector current, bias-tee states (checked, never changed), gain ladder, USB enumeration, daemon status, frequency sanity, tinySA bench fallback — each step saying what to observe and what the result implicates. Use when the waterfall is flat, the noise floor looks wrong, or the line that should be there isn't. Ends by writing the findings into the observation.
 ---
 
 # Troubleshoot the chain: no signal, in strict order
@@ -8,6 +8,30 @@ description: The no-signal decision tree for the RF chain, in strict order — f
 Work the steps **in order — do not skip ahead**; each one rules out everything before it.
 Some steps are physical checks at the dish (say so and wait for the human), some run over
 SSH/MCP. At every step: state **what to observe** and **what each outcome implicates**.
+
+## 0. Diagnostics bundle — one call, answers every software question
+
+Before touching anything, call **`get_diagnostics`** via MCP (or
+`GET /api/diagnostics`). One reply carries every software-side check in this
+tree's order — systemd unit states, SDR USB enumeration, daemon reachability +
+last-frame age, Pi thermals (temp + decoded throttle flags), disk headroom, DB
+schema version, and recent journal errors. Read it first and let it **pre-answer
+the software steps below**:
+
+- `checks.usb.devices.airspy` is step 4 (USB enumeration).
+- `checks.daemon` (reachable / source / `frame_age_s` / `stale`) is step 5
+  (daemon status) — "daemon ok but `frame_age_s` is None or large" is the
+  "up but no frames" branch.
+- `checks.thermals.throttled.flags` catches the undervoltage/soft-limit case
+  that step 4's `dmesg` hunt is really looking for.
+- `checks.systemd` and `checks.journal.recent_errors` are the crash-loop
+  evidence step 5 otherwise gathers by hand.
+
+Each check degrades to `"unavailable"` off the Pi, so a check you can't see is a
+missing tool, not a fault. What the bundle **cannot** see is everything physical
+— injector current, bias-tee states, gain, frequency, the bench. Those stay
+hands-on below, and they are the steps that actually diagnose most no-signal
+sessions. So: read the bundle, then still walk the physical steps in order.
 
 ## 1. Feed injector current (~120 mA) — physical check
 
@@ -47,7 +71,9 @@ downstream (steps 4–5).
 
 ## 4. USB enumeration
 
-Over SSH on the Pi: `airspy_info`.
+Step 0's `checks.usb` already answered this (`devices.airspy` / `devices.hackrf`);
+this step is the physical follow-up when it came back `false`. Over SSH on the
+Pi: `airspy_info`.
 
 - **Device listed** (serial, firmware) → USB path is fine. Move on.
 - **No device** → cable, port, or power: reseat the Airspy, try another port, check `dmesg`
@@ -56,9 +82,14 @@ Over SSH on the Pi: `airspy_info`.
 
 ## 5. Daemon status
 
+Step 0's `checks.daemon`, `checks.systemd`, and `checks.journal` are the fast
+path here; drop to these raw commands when you need more than the bundle's
+last-N error lines.
+
 - `systemctl status jansky-observe-capture` over SSH — running? Restart-looping? Check
   `journalctl -u jansky-observe-capture -n 50` for the actual error.
 - `get_live_status` via MCP — is the server receiving frames at all, and how stale are they?
+  (the bundle's `checks.daemon.frame_age_s` is the same signal).
 - **Daemon up but no frames** → the ZMQ hop or the source; the journal says which.
   **Daemon crash-looping** → the journal's traceback is the answer; frequency/gain settings
   it can't apply land here too.
