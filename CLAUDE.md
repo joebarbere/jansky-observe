@@ -101,21 +101,24 @@ nothing by design.
 
 ## Current status
 
-M0–M5 have all shipped — `v0.6.0` is live on the station and **feature-complete against
-the plan**: capture (synthetic + real Airspy), observation records + wizard + observing
-ladder, the hline_v1 classifier + live badge + LSR axes, PDF reports + photos + Virgo/ezRA
-exporters, Stellarium view-slew + cross-check, HackRF RFI sweep, gpsd locations, 17 MCP
-tools, and every plan-§12.6 Claude deliverable. **v1.0.0 is not a feature: it is tagged
+M0–M6 have all shipped — **`v0.7.0` (M6 "station cockpit") is released**, on top of the
+`v0.6.x` feature-complete base: capture (synthetic + real Airspy), observation records +
+wizard + observing ladder, the hline_v1 classifier + live badge + LSR axes, PDF reports +
+photos + Virgo/ezRA exporters, Stellarium view-slew + cross-check, HackRF RFI sweep, gpsd
+locations, and the cockpit (diagnostics + status bar + archive/purge + dark mode +
+localization + spectrum audio + `--fps` knob + RFI-survey template) over 18 MCP tools —
+every plan-§12.6 Claude deliverable plus the M6 set. **v1.0.0 is not a feature: it is tagged
 after one real end-to-end observing campaign (plan → observe → confirm → PDF), from
 whatever `v0.x` is current** — prerequisites are physical (feed chain connected, Sun
-pointing calibration run). M6 (v0.7.0, the station cockpit) is the next milestone. The `hi4pi_xcheck` (v2 confirmation) still arrives via jansky-research
+pointing calibration run). **M7 (v0.8.0, "Calibration & scheduling") is the next
+milestone** (`plans/roadmap-post-v0.6.md`). The `hi4pi_xcheck` (v2 confirmation) still arrives via jansky-research
 plan 78. The HI4PI cross-check (`hi4pi_xcheck`, v2) remains **deferred to
 jansky-research plan 78** per plan §6 — the comparison harness is built once there and
 consumed here. The full plan lives in `plans/jansky_observe.md` — read it before any
 feature work.
 
-**M6 (v0.7.0 "station cockpit") is feature-complete** (all seven pieces below landed; the
-`v0.7.0` tag is cut with `/release` once these merge) — see `plans/roadmap-post-v0.6.md`.
+**M6 (v0.7.0 "station cockpit") shipped** — all seven pieces below, released as `v0.7.0`
+(see `plans/roadmap-post-v0.6.md`).
 - **Diagnostics**: `GET /api/diagnostics` + the `get_diagnostics` MCP tool (now **18 tools**),
   a best-effort bundle in `server/diagnostics.py` (systemd units → SDR USB → daemon
   reachability + frame age → Pi thermals → disk → DB schema version → journal errors), each
