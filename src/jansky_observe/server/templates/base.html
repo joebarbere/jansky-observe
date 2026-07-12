@@ -5,11 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}jansky-observe{% endblock %}</title>
   <script>
-    /* Apply the saved theme before first paint (no flash). "auto"/absent →
-       leave unset so the prefers-color-scheme media query decides. */
+    /* Apply the saved theme before first paint (no flash). Dark is the default
+       (the CSS :root); only an explicit "light" choice sets the attribute. */
     (function () {
-      var t = localStorage.getItem("theme");
-      if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+      if (localStorage.getItem("theme") === "light")
+        document.documentElement.setAttribute("data-theme", "light");
     })();
   </script>
   <link rel="stylesheet" href="/static/style.css">

@@ -115,8 +115,15 @@ def test_ui_and_theme_assets_served() -> None:
     assert ui.status_code == 200
     assert "themechange" in ui.text
     css = client.get("/static/style.css").text
-    assert '[data-theme="light"]' in css  # the light palette exists
-    assert "prefers-color-scheme: light" in css
+    assert '[data-theme="light"]' in css  # light palette is opt-in
+    # Dark is the default regardless of OS preference — no prefers-color-scheme
+    # auto-switch (that was the "menu went white on a light laptop" regression).
+    assert "prefers-color-scheme" not in css
+    # The dark :root defaults must actually be present (they were once swallowed
+    # by a stray "*/" inside a comment — `--wf-*/--trace-*` — which closed the
+    # comment early and ate the whole :root block). Balanced comments guard it.
+    assert css.count("/*") == css.count("*/")
+    assert "--bg: #0b0e14" in css  # the dark :root block survives parsing
 
 
 def test_spectrum_audio_wired_into_live_view() -> None:

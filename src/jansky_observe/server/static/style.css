@@ -1,6 +1,7 @@
 /* jansky-observe — theme-aware (roadmap M6). Dark is the default (a waterfall
-   reads best on black); light and OS-preference follow via the vars below.
-   The canvas reads --wf-*/--trace-* so it tracks the page theme (ui.js). */
+   reads best on black); light is opt-in via the cockpit-bar toggle
+   (data-theme="light"). The canvas reads the wf/spec/trace vars so it tracks
+   the page theme (ui.js). */
 
 :root {
   --bg: #0b0e14;
@@ -19,8 +20,9 @@
   --trace-avg: #ffe082;
 }
 
-/* Light palette — applied when the viewer chooses light (data-theme="light")
-   or, absent an explicit choice, when the OS prefers light (media query below). */
+/* Light palette — opt-in only (the viewer chooses light via the toggle). Dark
+   stays the default regardless of the OS preference: the app is built around a
+   waterfall, which reads best on black. */
 :root[data-theme="light"] {
   --bg: #f6f8fb;
   --panel: #ffffff;
@@ -36,24 +38,9 @@
   --trace-live: rgba(2, 119, 189, 0.35);
   --trace-avg: #b9791f;
 }
-
-@media (prefers-color-scheme: light) {
-  :root:not([data-theme]) {
-    --bg: #f6f8fb;
-    --panel: #ffffff;
-    --border: #d5dce6;
-    --text: #1b2430;
-    --muted: #5b6675;
-    --accent: #0277bd;
-    --ok: #2e9e5b;
-    --warn: #b9791f;
-    --bad: #c0392b;
-    --wf-bg: #eef1f5;
-    --spec-bg: #ffffff;
-    --trace-live: rgba(2, 119, 189, 0.35);
-    --trace-avg: #b9791f;
-  }
-}
+/* Colored status badges use dark text in the light theme (the page text color),
+   not the near-white page background, so "detected" green stays legible. */
+:root[data-theme="light"] .badge { color: var(--text); }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
