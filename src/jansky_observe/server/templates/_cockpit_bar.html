@@ -1,0 +1,14 @@
+{# The station-cockpit status bar (roadmap M6): rides every page. Filled by
+   /static/statusbar.js from GET /api/status_bar; clocks tick client-side. #}
+<div id="cockpit-bar">
+  <span class="cb-item cb-clocks">
+    <b data-cb="utc">--:--:--</b> UTC
+    <span class="cb-sep">·</span> <b data-cb="local">--:--:--</b>
+    <span class="cb-sep">·</span> LST <b data-cb="lst">--:--</b>
+  </span>
+  <span class="cb-item cb-station" data-cb="station">…</span>
+  <span class="cb-item cb-source"><span class="cb-dot" data-cb="source-dot"></span><span data-cb="source">…</span></span>
+  <span class="cb-item cb-weather" data-cb="weather" hidden></span>
+  <span class="cb-item cb-disk" data-cb="disk">…</span>
+</div>
+<script src="/static/statusbar.js" defer></script>
