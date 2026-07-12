@@ -45,6 +45,7 @@ from jansky_observe.server.diagnostics import collect_diagnostics
 from jansky_observe.server.live_badge import LiveBadge
 from jansky_observe.server.routers import (
     calibration,
+    campaigns,
     catalog,
     gps,
     observations,
@@ -289,6 +290,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
     application.include_router(wizard.router)
     application.include_router(captures_router)
     application.include_router(calibration.router)
+    application.include_router(campaigns.router)
     application.include_router(sky.router)
     application.include_router(photos.router)
     application.include_router(reports.router)

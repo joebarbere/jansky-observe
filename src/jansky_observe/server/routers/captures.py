@@ -33,6 +33,7 @@ from sqlalchemy import Engine
 from sqlmodel import Session, col, select
 
 from jansky_observe.astro.lsr import vlsr_axis
+from jansky_observe.astro.pointing import sidereal_day_number
 from jansky_observe.confirm.classifier import (
     CLASSIFIER_NAME,
     averaged_spectrum,
@@ -42,6 +43,7 @@ from jansky_observe.confirm.plots import verdict_plot
 from jansky_observe.control import ctl_request
 from jansky_observe.models import (
     CalibrationEpoch,
+    Campaign,
     Capture,
     ClassifierResult,
     Location,
@@ -118,6 +120,21 @@ def latest_cal_epoch_id(session: Session) -> int | None:
     return None if epoch is None else epoch.id
 
 
+def active_campaign(session: Session) -> Campaign | None:
+    """The active drift-scan campaign, or ``None`` (roadmap M7). New captures are
+    tagged into it (campaign_id + sidereal_day) at registration."""
+    return session.exec(
+        select(Campaign).where(Campaign.status == "active").order_by(col(Campaign.id).desc())
+    ).first()
+
+
+def _default_lon_deg(session: Session) -> float:
+    location = session.exec(
+        select(Location).where(Location.is_default == True)  # noqa: E712
+    ).first()
+    return 0.0 if location is None else location.lon_deg
+
+
 def register_stopped_capture(engine: Engine | None, status: dict[str, Any]) -> int | None:
     """Create a :class:`Capture` row for a capture the daemon just stopped.
 
@@ -142,6 +159,7 @@ def register_stopped_capture(engine: Engine | None, status: dict[str, Any]) -> i
     ended = utcnow()
     started = ended - timedelta(seconds=float(status.get("elapsed_s") or 0.0))
     with Session(engine) as session:
+        campaign = active_campaign(session)
         capture = Capture(
             observation_id=_running_observation_id(session),
             device=str(status.get("source", "unknown")),
@@ -152,6 +170,12 @@ def register_stopped_capture(engine: Engine | None, status: dict[str, Any]) -> i
             end=ended,
             sdr_settings=parse_capture_settings(Path(str(path))),
             cal_epoch_id=latest_cal_epoch_id(session),  # science capture: cal in effect
+            campaign_id=None if campaign is None else campaign.id,
+            sidereal_day=(
+                None
+                if campaign is None
+                else sidereal_day_number(_default_lon_deg(session), started)
+            ),
         )
         session.add(capture)
         session.commit()

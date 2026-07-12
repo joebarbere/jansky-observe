@@ -37,6 +37,7 @@ __all__ = [
     "local_sidereal_time_hours",
     "pointing_now",
     "rise_set_info",
+    "sidereal_day_number",
     "target_coord",
     "transit_info",
 ]
@@ -60,6 +61,34 @@ def _to_datetime(t: Time) -> datetime:
     """Convert an astropy Time to a timezone-aware UTC datetime."""
     dt: datetime = t.utc.to_datetime()
     return dt.replace(tzinfo=UTC)
+
+
+def sidereal_day_number(lon_deg: float, when: datetime | None = None) -> int:
+    """Integer sidereal-day number at a longitude (roadmap M7 drift scans).
+
+    A monotonic counter that increments once per sidereal day (~23h56m of solar
+    time), with the day boundary rolled to local sidereal midnight (LST = 0) by
+    the longitude term. Two captures ~24h of solar time apart land on
+    consecutive numbers, so drift-scan passes at the same LST on different nights
+    are tagged as distinct passes yet align by LST for stacking.
+
+    Parameters
+    ----------
+    lon_deg : float
+        East longitude in degrees.
+    when : datetime, optional
+        UTC instant; the current time by default.
+
+    Returns
+    -------
+    int
+        The sidereal-day number.
+    """
+    jd = float(_to_time(when).jd)
+    # Sidereal days elapsed since J2000 (the standard mean rate); the longitude
+    # term shifts the roll to local sidereal midnight.
+    days = (jd - 2451545.0) * 1.0027379093508 + lon_deg / 360.0
+    return math.floor(days)
 
 
 def local_sidereal_time_hours(lon_deg: float, when: datetime | None = None) -> float:

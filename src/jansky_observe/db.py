@@ -162,6 +162,32 @@ def _migration_7_calibration_sweep_type(conn: Connection) -> None:
         session.commit()
 
 
+def _migration_8_driftscan(conn: Connection) -> None:
+    """Add drift-scan campaigns (roadmap M7, plan 80): the ``campaign`` table and
+    ``capture.campaign_id`` / ``capture.sidereal_day``. Frozen DDL matching the
+    M7 models; ``IF NOT EXISTS`` + ``PRAGMA table_info`` guards make it a no-op on
+    a fresh database and additive on an existing one.
+    """
+    conn.exec_driver_sql(
+        "CREATE TABLE IF NOT EXISTS campaign ("
+        " id INTEGER NOT NULL PRIMARY KEY,"
+        " name VARCHAR NOT NULL,"
+        " source_id INTEGER NOT NULL,"
+        " fixed_az_deg FLOAT,"
+        " fixed_el_deg FLOAT,"
+        " status VARCHAR NOT NULL DEFAULT 'active',"
+        " notes VARCHAR NOT NULL DEFAULT '',"
+        " created_at DATETIME NOT NULL,"
+        " FOREIGN KEY(source_id) REFERENCES radio_source (id)"
+        ")"
+    )
+    columns = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(capture)")}
+    if "campaign_id" not in columns:
+        conn.exec_driver_sql("ALTER TABLE capture ADD COLUMN campaign_id INTEGER")
+    if "sidereal_day" not in columns:
+        conn.exec_driver_sql("ALTER TABLE capture ADD COLUMN sidereal_day INTEGER")
+
+
 MIGRATIONS: list[tuple[int, Callable[[Connection], None]]] = [
     (1, _migration_1_initial_schema),
     (2, _migration_2_station_stellarium_url),
@@ -170,6 +196,7 @@ MIGRATIONS: list[tuple[int, Callable[[Connection], None]]] = [
     (5, _migration_5_rfi_survey_1420_type),
     (6, _migration_6_calibration),
     (7, _migration_7_calibration_sweep_type),
+    (8, _migration_8_driftscan),
 ]
 
 

@@ -145,3 +145,18 @@ class TestBeamMath:
     def test_beam_crossing_near_pole_is_none(self) -> None:
         assert beam_crossing_minutes(89.5) is None
         assert beam_crossing_minutes(-89.5) is None
+
+
+def test_sidereal_day_number_increments_once_per_sidereal_day() -> None:
+    from jansky_observe.astro.pointing import sidereal_day_number
+
+    SIDEREAL_DAY_S = 86164.0905  # one mean sidereal day
+    t0 = datetime(2026, 7, 1, 3, 17, 0, tzinfo=UTC)
+    d0 = sidereal_day_number(-75.16, t0)
+    # Adding exactly one sidereal day advances the counter by exactly one.
+    assert sidereal_day_number(-75.16, t0 + timedelta(seconds=SIDEREAL_DAY_S)) == d0 + 1
+    # An hour later is still the same sidereal day.
+    assert sidereal_day_number(-75.16, t0 + timedelta(hours=1)) == d0
+    # Monotonic, and stable for the same instant.
+    assert sidereal_day_number(-75.16, t0) == d0
+    assert sidereal_day_number(-75.16, t0 + timedelta(days=10)) > d0

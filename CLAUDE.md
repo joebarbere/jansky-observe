@@ -175,8 +175,15 @@ Landed so far:
 - **Sky chart**: a `/sky` canvas alt/az plot (`static/skychart.js`) fed by `GET /api/sky_chart`
   — catalog sources (station offsets applied), Sun, Moon, the galactic plane, and the beam
   cone at a running session's dialed pointing. Positions from `astro/skychart.py` (pure
-  astropy, offline); nav link "Sky". Still to come in M7: scheduler + session timer,
-  drift-scan campaign mode.
+  astropy, offline); nav link "Sky".
+- **Drift-scan campaign mode**: `Campaign` (name, source, fixed az/el, status) + `Capture.
+  campaign_id` + `Capture.sidereal_day` (migration 8). Captures registered while a campaign is
+  active are auto-tagged (`captures.active_campaign` + `pointing.sidereal_day_number` — a
+  monotonic counter that increments once per sidereal day, longitude-rolled). `routers/
+  campaigns.py`: a `/campaigns` page + `/campaigns/{id}` detail grouping captures into passes
+  by sidereal day (each with its LST for stacking) + `POST /campaigns` / `.../status` / `POST
+  /captures/{id}/campaign` (HTML-only) + `GET /api/campaigns[/{id}]`. Nav link "Campaigns".
+  Still to come in M7: scheduler + session timer.
 
 ## Skills & agents
 

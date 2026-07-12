@@ -21,6 +21,7 @@ __all__ = [
     "CALIBRATION_KINDS",
     "CAPTURE_KINDS",
     "CalibrationEpoch",
+    "Campaign",
     "Capture",
     "ChecklistItemState",
     "ChecklistTemplateItem",
@@ -240,6 +241,26 @@ class CalibrationEpoch(SQLModel, table=True):
     created_at: datetime = Field(default_factory=utcnow)
 
 
+class Campaign(SQLModel, table=True):
+    """A drift-scan campaign (roadmap M7, plan 80): fixed-pointing continuous
+    capture over many nights. Its captures are tagged with a sidereal-day number
+    so passes at the same LST across days stack. The dish sits at a fixed az/el
+    (``fixed_az_deg`` / ``fixed_el_deg``) and the sky drifts through the beam.
+    """
+
+    __tablename__ = "campaign"
+
+    id: int | None = Field(default=None, primary_key=True)
+    name: str = Field(index=True)
+    source_id: int = Field(foreign_key="radio_source.id")
+    fixed_az_deg: float | None = None
+    fixed_el_deg: float | None = None
+    #: ``"active"`` (captures are tagged into it) or ``"done"``.
+    status: str = "active"
+    notes: str = ""
+    created_at: datetime = Field(default_factory=utcnow)
+
+
 class Capture(SQLModel, table=True):
     """A recorded data file on disk, referenced by path.
 
@@ -272,6 +293,12 @@ class Capture(SQLModel, table=True):
     #: was taken under (a science capture, stamped at registration). See
     #: :class:`CalibrationEpoch`.
     cal_epoch_id: int | None = Field(default=None, foreign_key="calibration_epoch.id", index=True)
+    #: The drift-scan campaign this capture belongs to (roadmap M7), or ``None``.
+    campaign_id: int | None = Field(default=None, foreign_key="campaign.id", index=True)
+    #: Integer sidereal-day number at the capture's start (astro
+    #: ``sidereal_day_number``) — the drift-scan pass tag; captures on different
+    #: sidereal days at the same LST stack. ``None`` outside a campaign.
+    sidereal_day: int | None = None
     created_at: datetime = Field(default_factory=utcnow)
 
 
