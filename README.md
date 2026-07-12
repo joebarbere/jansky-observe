@@ -200,7 +200,7 @@ IQ recordings → rooftop networking (PoE switch + access point) → Discovery D
 a second dish → a KrakenSDR for coherent interferometry. Honestly: the wishlist is a general
 direction, not a promise — the roadmap and the observing plans can and will change as the
 station meets the real sky, and support also goes to smaller things like test equipment and
-the coffee behind the long coding sessions. (Plan: `plans/funding.md`.)
+the coffee behind the long coding sessions.
 
 ## License
 
