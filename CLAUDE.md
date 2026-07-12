@@ -98,13 +98,15 @@ nothing by design.
 
 ## Current status
 
-M0–M4 have shipped — `v0.5.0` is live on the station: photo ingest/resize with a highlight
-photo per observation (`photos.py`), the WeasyPrint PDF report
-(`POST /api/observations/{id}/report` → `data/observations/<id>/report.pdf`, contents per
-plan §7), Virgo-CSV + ezRA-txt exporters (`export/`,
-`GET /api/captures/{id}/export?format=...` — one-way conveniences, plan §4.7), and 16 MCP
-tools. Every plan-§12.6 Claude deliverable is shipped. **M5 (polish — Stellarium, HackRF
-RFI sweep, gpsd; the `v1.0.0` candidate) is next.** The HI4PI cross-check (`hi4pi_xcheck`, v2) remains **deferred to
+M0–M5 have all shipped — `v0.6.0` is live on the station and **feature-complete against
+the plan**: capture (synthetic + real Airspy), observation records + wizard + observing
+ladder, the hline_v1 classifier + live badge + LSR axes, PDF reports + photos + Virgo/ezRA
+exporters, Stellarium view-slew + cross-check, HackRF RFI sweep, gpsd locations, 17 MCP
+tools, and every plan-§12.6 Claude deliverable. **v1.0.0 is not a feature: it is tagged
+after one real end-to-end observing campaign (plan → observe → confirm → PDF) on a
+`v0.6.x` install** — prerequisites are physical (feed chain connected, Sun pointing
+calibration run). The `hi4pi_xcheck` (v2 confirmation) still arrives via jansky-research
+plan 78. The HI4PI cross-check (`hi4pi_xcheck`, v2) remains **deferred to
 jansky-research plan 78** per plan §6 — the comparison harness is built once there and
 consumed here. The full plan lives in `plans/jansky_observe.md` — read it before any
 feature work.

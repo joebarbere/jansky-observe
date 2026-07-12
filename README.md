@@ -40,8 +40,8 @@ full CI/release/install pipeline. **M4 — reports & photos — is in progress.*
 | `v0.3.0` | M2 | Observation records, checklists, session wizard | ✅ done |
 | `v0.4.0` | M3 | Confirmation: v1 classifier; HI4PI cross-check follows via `jansky-research` | ✅ done |
 | `v0.5.0` | M4 | Reports & photos: PDF export, Virgo/ezRA exporters | ✅ done |
-| `v0.6.0` | M5 | Feature-complete — the `v1.0.0` release candidate | ⏭ next |
-| `v1.0.0` | — | After one real end-to-end observing campaign | |
+| `v0.6.0` | M5 | Feature-complete — the `v1.0.0` release candidate | ✅ done |
+| `v1.0.0` | — | After one real end-to-end observing campaign | ⏭ next |
 
 ## Quickstart (dev)
 
