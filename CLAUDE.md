@@ -89,7 +89,10 @@ Pre-1.0 semver: **minor = milestone, patch = fixes between milestones.**
 | `v0.4.0` | M3 | Confirmation: v1 classifier + HI4PI cross-check |
 | `v0.5.0` | M4 | Reports & photos: PDF export, exporters |
 | `v0.6.0` | M5 | Feature-complete — the `v1.0.0` release candidate |
-| `v1.0.0` | — | After one real end-to-end observing campaign on a `v0.6.x` install |
+| `v1.0.0` | — | After one real end-to-end observing campaign, from whatever `v0.x` is current |
+
+M6–M9 (v0.7.0–v0.9.0 and v1.1.0) are specified in `plans/roadmap-post-v0.6.md`; none of
+them move the `v1.0.0` gate.
 
 The `/release` skill encodes the whole procedure — use it, don't tag by hand. If
 `deploy/install.sh` or `deploy/OS_IMAGE` changed since the last tag, `make qemu-install` MUST
@@ -103,9 +106,9 @@ the plan**: capture (synthetic + real Airspy), observation records + wizard + ob
 ladder, the hline_v1 classifier + live badge + LSR axes, PDF reports + photos + Virgo/ezRA
 exporters, Stellarium view-slew + cross-check, HackRF RFI sweep, gpsd locations, 17 MCP
 tools, and every plan-§12.6 Claude deliverable. **v1.0.0 is not a feature: it is tagged
-after one real end-to-end observing campaign (plan → observe → confirm → PDF) on a
-`v0.6.x` install** — prerequisites are physical (feed chain connected, Sun pointing
-calibration run). The `hi4pi_xcheck` (v2 confirmation) still arrives via jansky-research
+after one real end-to-end observing campaign (plan → observe → confirm → PDF), from
+whatever `v0.x` is current** — prerequisites are physical (feed chain connected, Sun
+pointing calibration run). M6 (v0.7.0, the station cockpit) is the next milestone. The `hi4pi_xcheck` (v2 confirmation) still arrives via jansky-research
 plan 78. The HI4PI cross-check (`hi4pi_xcheck`, v2) remains **deferred to
 jansky-research plan 78** per plan §6 — the comparison harness is built once there and
 consumed here. The full plan lives in `plans/jansky_observe.md` — read it before any

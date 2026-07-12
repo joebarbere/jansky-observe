@@ -42,7 +42,8 @@ debug bundle a remote Claude needs for this class of setup, in check order:
 2. SDR USB enumeration (Airspy / HackRF vendor:product present?),
 3. daemon status + age of the last ZMQ frame (is data flowing?),
 4. thermals: `vcgencmd measure_temp` + `get_throttled` decoded (undervoltage / soft-limit
-   flags — this Pi has brushed the soft limit),
+   flags — this Pi brushed the soft limit before the Argon ONE V2 case added active cooling;
+   the undervoltage flags still matter regardless),
 5. disk free for the data dir; best-effort SMART summary (NVMe yes, SD no),
 6. DB `PRAGMA user_version` vs expected,
 7. last N error lines from the two units' journals (best-effort, needs journal access).

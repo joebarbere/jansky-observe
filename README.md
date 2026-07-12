@@ -1,6 +1,8 @@
 # jansky-observe
 
 [![CI](https://github.com/joebarbere/jansky-observe/actions/workflows/ci.yml/badge.svg)](https://github.com/joebarbere/jansky-observe/actions/workflows/ci.yml)
+[![GitHub Sponsors](https://img.shields.io/github/sponsors/joebarbere?logo=githubsponsors)](https://github.com/sponsors/joebarbere)
+[![Ko-fi](https://img.shields.io/badge/Ko--fi-donate-ff5f5f?logo=kofi&logoColor=white)](https://ko-fi.com/joebarbere)
 
 **Observation management for the Discovery Dish station — plan, run, and record attended radio
 observations end to end.**
@@ -44,10 +46,10 @@ after.
 | `v0.4.0` | M3 | Confirmation: v1 classifier; HI4PI cross-check follows via `jansky-research` | ✅ done |
 | `v0.5.0` | M4 | Reports & photos: PDF export, Virgo/ezRA exporters | ✅ done |
 | `v0.6.0` | M5 | Feature-complete — the `v1.0.0` release candidate | ✅ done |
-| `v1.0.0` | — | After one real end-to-end observing campaign | ⏭ next |
-| `v0.7.0` | M6 | Station cockpit: status bar, diagnostics MCP, audio, dark mode, archive | 📋 planned |
+| `v0.7.0` | M6 | Station cockpit: status bar, diagnostics MCP, audio, dark mode, archive | ⏭ next |
 | `v0.8.0` | M7 | Calibration captures, scheduler, drift-scan campaigns, sky chart | 📋 planned |
 | `v0.9.0` | M8 | Research bridge: station UUID, export bundle, build-guide PDFs | 📋 planned |
+| `v1.0.0` | — | Tagged after one real campaign, from whatever v0.x is current | 📋 planned |
 | `v1.1.0` | M9 | Rotator: Discovery Drive (rotctl TCP / EasyComm II) | 📋 planned |
 
 The post-v0.6 milestones are specified in `plans/roadmap-post-v0.6.md` — they build while
@@ -139,7 +141,25 @@ curl -fsSL https://github.com/joebarbere/jansky-observe/releases/latest/download
 
 Idempotent and re-runnable (re-running upgrades in place); installs apt deps, uv, the release
 wheel, udev rules, and the two systemd units, then health-checks itself. Flags: `--version vX.Y.Z`,
-`--no-start`, `--uninstall`.
+`--no-start`, `--uninstall`, `--reset-data`.
+
+### Resetting station data (QA / clean install)
+
+Practice sessions while you learn the software don't have to live in your station log forever.
+Everything the station records — the SQLite database, captures, photos, reports — lives in one
+directory (`data/` in dev, `/var/lib/jansky-observe/` on the Pi), and the reset is all-or-nothing:
+
+```bash
+rm -rf data/            # dev — or point JANSKY_OBSERVE_DATA_DIR at a scratch dir instead
+
+sudo bash install.sh --reset-data       # Pi — stops the services, wipes the data dir, restarts
+                                        # (add --yes when piping through curl | bash)
+```
+
+Migrations and seeds rebuild a fresh, empty station on the next start. There is deliberately no
+per-observation delete: an observing log you can edit selectively isn't a log, and the MCP
+surface carries no delete verbs at all (plan §12.4). M6 adds a restorable **archive** for
+hiding observations without destroying provenance — the reset stays the only destructive verb.
 
 ## Layout
 
@@ -175,9 +195,12 @@ The full project plan — architecture, data model, integrations, milestones —
 
 If this project is useful to you — or just fun to watch — you can help fund the next piece
 of station hardware via [GitHub Sponsors](https://github.com/sponsors/joebarbere) or
-[Ko-fi](https://ko-fi.com/joebarbere). Current wishlist, roughly in order: Pi 5 active
-cooler → storage for IQ recordings → Discovery Drive rotator → a second dish → a KrakenSDR
-for coherent interferometry. (Plan: `plans/funding.md`.)
+[Ko-fi](https://ko-fi.com/joebarbere). The current wishlist, roughly in order: storage for
+IQ recordings → rooftop networking (PoE switch + access point) → Discovery Drive rotator →
+a second dish → a KrakenSDR for coherent interferometry. Honestly: the wishlist is a general
+direction, not a promise — the roadmap and the observing plans can and will change as the
+station meets the real sky, and support also goes to smaller things like test equipment and
+the coffee behind the long coding sessions. (Plan: `plans/funding.md`.)
 
 ## License
 
