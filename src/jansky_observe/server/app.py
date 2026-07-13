@@ -61,6 +61,7 @@ from jansky_observe.server.routers.captures import register_stopped_capture
 from jansky_observe.server.routers.captures import router as captures_router
 from jansky_observe.server.scheduler import SchedulerState, scheduler_loop
 from jansky_observe.server.status_bar import WeatherCache, build_status_bar
+from jansky_observe.server.tracking import TrackingState, tracking_loop
 
 __all__ = ["Broadcaster", "CaptureStartBody", "app", "create_app"]
 
@@ -251,6 +252,10 @@ async def _lifespan(application: FastAPI) -> AsyncIterator[None]:
     # drives the daemon through the control channel at scheduled transits.
     sched_task = asyncio.create_task(scheduler_loop(application))
     application.state.scheduler_task = sched_task
+    # Drift tracking (roadmap M9): re-points the rotator at a beam-crossing-aware
+    # cadence while an observation is running and tracking is enabled.
+    track_task = asyncio.create_task(tracking_loop(application))
+    application.state.tracking_task = track_task
     # FastMCP's HTTP transport runs a session manager inside the sub-app's own
     # lifespan — it must be entered here or /mcp requests 500.
     mcp_app = application.state.mcp_app
@@ -258,7 +263,7 @@ async def _lifespan(application: FastAPI) -> AsyncIterator[None]:
         async with mcp_app.router.lifespan_context(mcp_app):
             yield
     finally:
-        for background in (task, sched_task):
+        for background in (task, sched_task, track_task):
             background.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await background
@@ -292,6 +297,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
     application.state.engine = engine
     application.state.weather_cache = WeatherCache()
     application.state.scheduler = SchedulerState()
+    application.state.tracking = TrackingState()
     application.mount("/static", StaticFiles(directory=str(_PACKAGE_DIR / "static")), name="static")
     application.include_router(observations.router)
     # gps before catalog: /catalog/locations/from-gps must beat /catalog/locations/{id}.

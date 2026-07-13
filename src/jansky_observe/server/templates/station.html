@@ -62,6 +62,10 @@
       title="slew to the park/stow position">Park</button></form>
     <form method="post" action="/rotator/stop"><button class="btn btn-small btn-stop" type="submit"
       title="halt motion now">Stop</button></form>
+    <form method="post" action="/rotator/tracking/start"><button class="btn btn-small" type="submit"
+      title="re-point as the source drifts — needs a running observation">Track</button></form>
+    <form method="post" action="/rotator/tracking/stop"><button class="btn btn-small" type="submit"
+      title="stop drift tracking">Stop tracking</button></form>
   </div>
   {% endif %}
 

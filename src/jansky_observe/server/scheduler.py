@@ -200,8 +200,34 @@ async def scheduler_tick(app: FastAPI, now: datetime | None = None) -> None:
                 state.stop_at = stop
                 state.note = f"running schedule {schedule.id} until {stop.isoformat()}"
                 state.notes[schedule.id or 0] = "running"
+                # Auto-slew the rotator to the schedule's source at window open
+                # (roadmap M9). Best-effort: a rotator problem never fails the capture.
+                await asyncio.to_thread(_auto_slew_to_source, engine, schedule.source_id, now)
             else:
                 state.notes[schedule.id or 0] = f"start refused by daemon: {reply.get('error')}"
+
+
+def _auto_slew_to_source(engine: Any, source_id: int, when: datetime) -> None:
+    """Best-effort scheduler auto-slew: point the rotator at a source's current
+    az/el. A missing rotator, limits, or transport error is logged, never raised —
+    the scheduled capture proceeds regardless."""
+    from jansky_observe.server.rotator import slew
+    from jansky_observe.server.routers import default_location, default_station, source_pointing
+
+    try:
+        with Session(engine) as session:
+            source = session.get(RadioSource, source_id)
+            if source is None:
+                return
+            station = default_station(session)
+            if station.rotator_kind == "none":
+                return
+            pointing = source_pointing(
+                source, default_location(session), station, when=when, full=False
+            )
+            slew(station, float(pointing["az_deg"]), float(pointing["el_deg"]))
+    except Exception:  # noqa: BLE001 - auto-slew is best-effort; never fail the capture
+        logger.warning("scheduler auto-slew to source %s failed", source_id, exc_info=True)
 
 
 def _sample_rate(app: FastAPI) -> float:
