@@ -1,6 +1,6 @@
 [project]
 name = "jansky-observe"
-version = "0.9.0"
+version = "0.9.1"
 description = "Observation management for the Discovery Dish station: plan, run, and record attended radio observations. Sibling of the jansky course and jansky-research."
 readme = "README.md"
 requires-python = ">=3.12,<3.13"

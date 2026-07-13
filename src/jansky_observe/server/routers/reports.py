@@ -102,9 +102,7 @@ def api_observation_bundle(request: Request, session: SessionDep, obs_id: int) -
     observation = get_or_404(session, Observation, obs_id)
     exports_dir = Path(request.app.state.settings.data_dir) / "exports"
     zip_path = write_observation_bundle(session, observation, exports_dir)
-    return FileResponse(
-        zip_path, media_type="application/zip", filename=zip_path.name
-    )
+    return FileResponse(zip_path, media_type="application/zip", filename=zip_path.name)
 
 
 def _ezra_context(session: SessionDep, capture: Capture) -> dict[str, Any]:

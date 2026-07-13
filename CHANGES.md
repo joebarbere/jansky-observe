@@ -6,6 +6,15 @@ milestones**). Work that landed outside a milestone gets a brief summary under t
 that shipped it. Maintained as part of `/release` — a release isn't finished until its
 section exists here.
 
+## v0.9.1 — 2026-07-13
+
+Maintenance release, no milestone — the shippable form of M8. The `v0.9.0` tag is
+inert (it published nothing): its release run failed the CI **format check**
+because six M8 files were lint-clean but not `ruff format`-clean. This release
+applies `ruff format`, syncs `uv.lock` to the new version, and re-tags. No source
+behavior changed; schema stays at `user_version` 10. See `v0.9.0` below for the
+M8 feature notes.
+
 ## v0.9.0 — 2026-07-12 — M8 "Research bridge & guides"
 
 The station's "data out" story and its first printable guides. Three pieces

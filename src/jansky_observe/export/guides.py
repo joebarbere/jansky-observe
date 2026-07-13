@@ -219,9 +219,7 @@ def observation_guide_model(session: Session) -> Guide:
         )
         if not steps:
             steps = ("(no checklist items for this type)",)
-        stages.append(
-            GuideStage(title=obs_type.name, summary=obs_type.description, steps=steps)
-        )
+        stages.append(GuideStage(title=obs_type.name, summary=obs_type.description, steps=steps))
     return Guide(
         key="observation",
         title="Observation guide",

@@ -121,9 +121,7 @@ def _observation(engine: Engine) -> int:
         return observation.id
 
 
-def _add_capture(
-    engine: Engine, path: Path, obs_id: int, fmt: str = "npz_spectra"
-) -> int:
+def _add_capture(engine: Engine, path: Path, obs_id: int, fmt: str = "npz_spectra") -> int:
     with Session(engine) as session:
         capture = Capture(
             observation_id=obs_id,

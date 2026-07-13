@@ -25,8 +25,16 @@ _TEMPLATES_DIR = Path(__file__).resolve().parent.parent / "templates"
 
 #: Display metadata for the index page (order matters).
 _GUIDES = (
-    ("build", "Station build guide", "Assemble the dish, feed, injector, SDR, and Pi — feed to first light."),
-    ("observation", "Observation guide", "Every observing procedure as printable, check-off-able checklists."),
+    (
+        "build",
+        "Station build guide",
+        "Assemble the dish, feed, injector, SDR, and Pi — feed to first light.",
+    ),
+    (
+        "observation",
+        "Observation guide",
+        "Every observing procedure as printable, check-off-able checklists.",
+    ),
 )
 
 
