@@ -101,28 +101,28 @@ nothing by design.
 
 ## Current status
 
-M0–M8 have all shipped — **`v0.9.0` (M8 "Research bridge & guides") is released** (tagged
-`v0.9.1` after a format-check re-tag; `v0.9.0` is inert), on top of the M7 calibration/scheduling
-milestone, the M6 cockpit, and the `v0.6.x` feature-complete base: capture (synthetic + real
-Airspy), observation records + wizard + observing ladder, the hline_v1 classifier + live badge +
-LSR axes, PDF reports + photos + Virgo/ezRA exporters, Stellarium view-slew + cross-check, HackRF
-RFI sweep, gpsd locations, the cockpit (diagnostics + status bar + archive/purge + dark mode +
-localization + spectrum audio + `--fps` knob + RFI-survey template), M7 (calibration
-epochs + kinds, an offline sky chart, drift-scan campaigns with sidereal-day tagging, and the
-unattended transit scheduler + session timer), and M8 (a stable station UUID, the codified
-JSON+npz observation bundle, and printable build + observation guide PDFs) over 20 MCP tools.
-Schema is at `user_version` 10. **v1.0.0 is not a feature: it is tagged after one real
-end-to-end observing campaign (plan → observe → confirm → PDF), from whatever `v0.x` is
-current** — prerequisites are physical (feed chain connected, Sun pointing calibration run).
-**M9 (v1.1.0, "Rotator — Discovery Drive") is the next milestone**
-(`plans/roadmap-post-v0.6.md`). The one remaining M8 follow-up is cross-repo: the
-**jansky-research pull skill** (lives in `../jansky-research`, consumes the bundle over MCP) —
-jansky-observe's side of that contract (the bundle format + the tools it calls) already ships.
-The HI4PI cross-check (`hi4pi_xcheck`, v2) remains **deferred to jansky-research plan 78** per
-plan §6 — the comparison harness is built once there and consumed here. The full plan lives in
+M0–M9 have all shipped — **`v0.10.0` (M9 "Rotator — Discovery Drive") is released and live on
+the Pi** (schema `user_version` 11, 22 MCP tools), on top of M8 research-bridge/guides
+(`v0.9.1`), M7 calibration/scheduling, the M6 cockpit, and the `v0.6.x` feature-complete base:
+capture (synthetic + real Airspy), observation records + wizard + observing ladder, the hline_v1
+classifier + live badge + LSR axes, PDF reports + photos + Virgo/ezRA exporters, Stellarium
+view-slew + cross-check, HackRF RFI sweep, gpsd locations, the cockpit (diagnostics + status bar
++ archive/purge + dark mode + localization + spectrum audio + `--fps` knob + RFI-survey template),
+M7 (calibration epochs + kinds, an offline sky chart, drift-scan campaigns with sidereal-day
+tagging, and the unattended transit scheduler + session timer), M8 (a stable station UUID, the
+codified JSON+npz observation bundle, and printable build + observation guide PDFs), and M9 (az/el
+rotator control of the KrakenRF Discovery Drive over rotctl-TCP + EasyComm II, a simulator, drift
+tracking + scheduler auto-slew, and the guarded `slew_rotator` MCP verb — the one MCP verb that
+moves hardware). **All roadmap milestones (M6–M9 in `plans/roadmap-post-v0.6.md`) are now
+shipped.** **v1.0.0 is not a feature: it is tagged after one real end-to-end observing campaign
+(plan → observe → confirm → PDF), from whatever `v0.x` is current** — prerequisites are physical
+(feed chain connected, Sun pointing calibration run). What's left is that campaign gate plus the
+roadmap's **parked follow-up list** (v2 multi-station is explicitly not scheduled). The HI4PI
+cross-check (`hi4pi_xcheck`, v2) remains **deferred to jansky-research plan 78** per plan §6 — the
+comparison harness is built once there and consumed here. The full plan lives in
 `plans/jansky_observe.md` — read it before any feature work.
 
-**M9 (v0.10.0 "Rotator — Discovery Drive") is in progress** on `main` — synthetic-first
+**M9 (v0.10.0 "Rotator — Discovery Drive") shipped** — released as `v0.10.0`, synthetic-first
 (built against a simulated rotator; the Drive is still on the wishlist). Decisions (2026-07-13):
 **both transports** (rotctl-TCP + EasyComm II, adds `pyserial`) and a **guarded `slew_rotator`
 MCP verb** — the first mutating MCP verb that moves hardware, gated on the station az/el limits +
