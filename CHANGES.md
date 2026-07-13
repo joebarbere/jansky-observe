@@ -6,6 +6,35 @@ milestones**). Work that landed outside a milestone gets a brief summary under t
 that shipped it. Maintained as part of `/release` — a release isn't finished until its
 section exists here.
 
+## v0.10.0 — 2026-07-13 — M9 "Rotator — Discovery Drive"
+
+Az/el rotator control for the KrakenRF Discovery Drive. Synthetic-first (built and
+CI'd against an in-process simulator; the Drive is still on the wishlist). Four
+pieces; schema advances to `user_version` 11. **`install.sh` changed** (a udev rule
+for the Drive's USB-serial bridge), so this release passed the QEMU install gate.
+Numbered `v0.10.0` — not `v1.1.0` — because no observing campaign has tagged
+`v1.0.0` yet; the roadmap table shifts accordingly.
+
+- **Rotator client + config + simulator** (#37): `astro/rotator.py` — a transport
+  protocol with `RotctlTcpRotator` (rotctld NET protocol over TCP, stdlib socket),
+  `EasyCommSerialRotator` (EasyComm II over USB-serial; pyserial), and `SimRotator`
+  (finite slew rate under an injectable clock). `Station` gains the rotator config
+  (kind none/sim/rotctl/easycomm + host/port/serial/baud + az/el limits + park).
+  Migration 11; `+ pyserial`.
+- **Slew + readback UI** (#38): `GET /api/rotator` status + `POST /rotator/slew|stop|
+  park` + `POST /observations/{id}/slew_to_target` — every slew limit-checked and
+  logged to the running observation. A rotator panel on `/station` (live readback)
+  and a "Slew to target" button on the observation detail page.
+- **Tracking mode + scheduler auto-slew** (#39): a lifespan loop re-points the
+  rotator whenever the source drifts past a fraction of the beam from the last
+  command (beam-crossing-aware); enabled per running observation, auto-stops when it
+  ends. Scheduled captures auto-slew to their source at window open (best-effort).
+- **Rotator MCP verbs + udev** (#40): `get_rotator_status` (read-only) and
+  **`slew_rotator`** — the first MCP verb that moves hardware, hard-limit-checked and
+  timeline-logged (never touches the bias tee). MCP grows to **22 tools**. udev rules
+  for the Drive's USB-serial bridge (CP210x/CH340/Espressif → a stable
+  `/dev/jansky-rotator` symlink).
+
 ## v0.9.1 — 2026-07-13
 
 Maintenance release, no milestone — the shippable form of M8. The `v0.9.0` tag is
