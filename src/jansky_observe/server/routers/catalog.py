@@ -10,12 +10,13 @@ completion flow.
 
 from __future__ import annotations
 
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlmodel import col, select
 
+from jansky_observe import __version__
 from jansky_observe.models import (
     ChecklistTemplateItem,
     Location,
@@ -24,7 +25,13 @@ from jansky_observe.models import (
     RadioSource,
     utcnow,
 )
-from jansky_observe.server.routers import TEMPLATES, SessionDep, default_station, get_or_404
+from jansky_observe.server.routers import (
+    TEMPLATES,
+    SessionDep,
+    default_location,
+    default_station,
+    get_or_404,
+)
 
 __all__ = ["router"]
 
@@ -254,6 +261,30 @@ def station_page(request: Request, session: SessionDep) -> HTMLResponse:
     """The station page: dish info, RF chain as an ordered list, pointing offsets."""
     station = default_station(session)
     return TEMPLATES.TemplateResponse(request, "station.html", {"station": station})
+
+
+@router.get("/api/station")
+def api_station(session: SessionDep) -> dict[str, Any]:
+    """The station identity response (roadmap M8): the stable ``uuid`` plus the
+    human name, dish/mount, the software version, and the default location — what
+    stamps every export and answers ``get_station_identity`` over MCP. Read-only.
+    """
+    station = default_station(session)
+    location = default_location(session)
+    return {
+        "uuid": station.uuid,
+        "name": station.name,
+        "dish_diameter_m": station.dish_diameter_m,
+        "dish_f_d": station.dish_f_d,
+        "mount_type": station.mount_type,
+        "software_version": __version__,
+        "location": {
+            "name": location.name,
+            "lat_deg": location.lat_deg,
+            "lon_deg": location.lon_deg,
+            "elevation_m": location.elevation_m,
+        },
+    }
 
 
 @router.post("/station/offsets")

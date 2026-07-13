@@ -332,6 +332,43 @@ def test_migration_9_upgrade_from_version_8_adds_table(tmp_path: Path) -> None:
     assert _user_version(engine) == max(version for version, _ in db.MIGRATIONS)
 
 
+def test_migration_10_fresh_db_has_station_uuid(tmp_path: Path) -> None:
+    from jansky_observe.models import Station
+
+    engine = db.init_db(tmp_path / "data")
+    assert _user_version(engine) == max(version for version, _ in db.MIGRATIONS)
+    assert "uuid" in {c["name"] for c in inspect(engine).get_columns("station")}
+    with db.session(engine) as s:
+        station = s.exec(select(Station)).one()
+    assert station.uuid and len(station.uuid) == 36  # a real UUID4 string
+
+
+def test_migration_10_upgrade_from_version_9_backfills_uuid(tmp_path: Path) -> None:
+    from jansky_observe.models import Station
+
+    # Simulate a pre-M8 station with no uuid column. The column is indexed, so
+    # the index is dropped before the column (SQLite won't DROP an indexed one).
+    engine = db.get_engine(tmp_path / "data")
+    with engine.begin() as conn:
+        for version, apply in db.MIGRATIONS[:9]:  # migrations 1..9
+            apply(conn)
+            conn.exec_driver_sql(f"PRAGMA user_version = {version}")
+        conn.exec_driver_sql("DROP INDEX IF EXISTS ix_station_uuid")
+        conn.exec_driver_sql("ALTER TABLE station DROP COLUMN uuid")
+    assert _user_version(engine) == 9
+    assert "uuid" not in {c["name"] for c in inspect(engine).get_columns("station")}
+
+    db.migrate(engine)
+    assert _user_version(engine) == max(version for version, _ in db.MIGRATIONS)
+    with db.session(engine) as s:
+        first_uuid = s.exec(select(Station)).one().uuid
+    assert first_uuid and len(first_uuid) == 36  # existing station got a backfilled uuid
+
+    db.migrate(engine)  # re-run must not regenerate it
+    with db.session(engine) as s:
+        assert s.exec(select(Station)).one().uuid == first_uuid
+
+
 def test_migration_5_seeds_the_type_into_a_version_4_db(tmp_path: Path) -> None:
     from jansky_observe.models import ChecklistTemplateItem, ObservationType
 

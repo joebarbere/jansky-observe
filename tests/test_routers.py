@@ -149,6 +149,24 @@ def test_station_page_shows_offsets_and_rf_chain(client: TestClient) -> None:
     assert "inline USB-C bias-tee injector" in body
 
 
+def test_station_page_shows_uuid(client: TestClient, engine: Engine) -> None:
+    with Session(engine) as s:
+        uuid = s.exec(select(Station)).one().uuid
+    body = client.get("/station").text
+    assert uuid in body  # the permanent station ID is shown on the page
+
+
+def test_api_station_identity(client: TestClient, engine: Engine) -> None:
+    with Session(engine) as s:
+        uuid = s.exec(select(Station)).one().uuid
+    identity = client.get("/api/station").json()
+    assert identity["uuid"] == uuid
+    assert identity["name"] == "Discovery Dish"
+    assert identity["software_version"]  # the running version
+    assert identity["location"]["name"] == "Home"
+    assert identity["location"]["lat_deg"] == pytest.approx(40.024)
+
+
 def test_station_offsets_direct_update(client: TestClient) -> None:
     resp = client.post(
         "/station/offsets",

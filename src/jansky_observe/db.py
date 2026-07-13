@@ -210,6 +210,36 @@ def _migration_9_schedule(conn: Connection) -> None:
     )
 
 
+def _migration_10_station_uuid(conn: Connection) -> None:
+    """Add ``station.uuid`` — a stable UUID4 station identity (roadmap M8,
+    jansky-research plan 78) stamped into the report, the observation bundle, and
+    the MCP identity response.
+
+    Guarded on ``PRAGMA table_info`` (migration 1 builds the latest schema, so a
+    fresh database already has the column, populated by the model's
+    ``default_factory`` at seed time). On an existing station the ``ALTER`` adds
+    the column with an empty default; SQLite has no UUID function, so we generate
+    in Python and backfill any row still missing one. The ``ALTER`` cannot carry
+    the model's ``index=True`` (SQLite forbids indexed/unique columns in
+    ``ADD COLUMN``), so we create the matching index separately — both paths land
+    on the same schema.
+    """
+    from uuid import uuid4
+
+    columns = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(station)")}
+    if "uuid" not in columns:
+        conn.exec_driver_sql(
+            "ALTER TABLE station ADD COLUMN uuid VARCHAR NOT NULL DEFAULT ''"
+        )
+    for (station_id,) in conn.exec_driver_sql(
+        "SELECT id FROM station WHERE uuid IS NULL OR uuid = ''"
+    ).fetchall():
+        conn.exec_driver_sql(
+            "UPDATE station SET uuid = ? WHERE id = ?", (str(uuid4()), station_id)
+        )
+    conn.exec_driver_sql("CREATE INDEX IF NOT EXISTS ix_station_uuid ON station (uuid)")
+
+
 MIGRATIONS: list[tuple[int, Callable[[Connection], None]]] = [
     (1, _migration_1_initial_schema),
     (2, _migration_2_station_stellarium_url),
@@ -220,6 +250,7 @@ MIGRATIONS: list[tuple[int, Callable[[Connection], None]]] = [
     (7, _migration_7_calibration_sweep_type),
     (8, _migration_8_driftscan),
     (9, _migration_9_schedule),
+    (10, _migration_10_station_uuid),
 ]
 
 
