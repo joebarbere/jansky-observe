@@ -93,12 +93,14 @@ def test_tool_surface_has_no_forbidden_verbs(tmp_path):
         "get_observation",
         "get_observation_bundle",
         "get_pointing",
+        "get_rotator_status",
         "get_spectrum",
         "get_station_identity",
         "get_weather",
         "list_observations",
         "reset_hi_badge",
         "run_classifier",
+        "slew_rotator",
         "start_rfi_sweep",
         "tick_checklist_item",
         "whats_up",
@@ -339,6 +341,59 @@ def test_get_observation_bundle(tmp_path):
             assert len(bundle["station"]["uuid"]) == 36  # plan 78's per-station key
             assert bundle["observation"]["id"] == draft["id"]
             assert bundle["captures"] == []  # a fresh draft has no captures yet
+
+    asyncio.run(scenario())
+
+
+def test_rotator_mcp_tools(tmp_path):
+    from sqlmodel import select
+
+    from jansky_observe.models import Station
+
+    engine = init_db(tmp_path)
+    with Session(engine) as s:
+        station = s.exec(select(Station)).one()
+        station.rotator_kind = "sim"
+        station.el_min_deg = -90.0  # any in-envelope target
+        s.add(station)
+        s.commit()
+    app = create_app(Settings(data_dir=str(tmp_path)), engine=engine)
+    mcp = build_mcp(app)
+
+    async def scenario():
+        async with Client(mcp) as client:
+            status = _payload(await client.call_tool("get_rotator_status", {}))
+            assert status["kind"] == "sim" and status["configured"] is True
+            slewed = _payload(
+                await client.call_tool("slew_rotator", {"az_deg": 120.0, "el_deg": 30.0})
+            )
+            assert slewed == {"ok": True, "az_deg": 120.0, "el_deg": 30.0}
+
+    asyncio.run(scenario())
+
+
+def test_slew_rotator_refused_outside_limits(tmp_path):
+    from sqlmodel import select
+
+    from jansky_observe.models import Station
+
+    engine = init_db(tmp_path)
+    with Session(engine) as s:
+        station = s.exec(select(Station)).one()
+        station.rotator_kind = "sim"
+        station.el_min_deg, station.el_max_deg = 80.0, 90.0  # a tight window
+        s.add(station)
+        s.commit()
+    mcp = build_mcp(create_app(Settings(data_dir=str(tmp_path)), engine=engine))
+
+    async def scenario():
+        async with Client(mcp) as client:
+            raised = False
+            try:
+                await client.call_tool("slew_rotator", {"az_deg": 120.0, "el_deg": 10.0})
+            except Exception:  # noqa: BLE001 - the 422 surfaces as a tool error
+                raised = True
+            assert raised, "expected the out-of-limits slew to be refused"
 
     asyncio.run(scenario())
 

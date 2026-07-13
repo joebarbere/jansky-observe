@@ -16,6 +16,7 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import RedirectResponse
+from pydantic import BaseModel
 from sqlmodel import col, select
 
 from jansky_observe.models import Observation, RadioSource, Station, utcnow
@@ -143,6 +144,25 @@ def rotator_slew(
     _do_slew(station, az_deg, el_deg)
     _log_slew(session, f"Rotator slew to az {az_deg:.1f}° / el {el_deg:.1f}° (manual).")
     return _see_other("/station")
+
+
+class SlewBody(BaseModel):
+    """Request body for the JSON slew endpoint (the guarded MCP verb)."""
+
+    az_deg: float
+    el_deg: float
+
+
+@router.post("/api/rotator/slew")
+def api_rotator_slew(session: SessionDep, body: SlewBody) -> dict[str, Any]:
+    """Guarded JSON slew — the endpoint the ``slew_rotator`` MCP verb proxies. Goes
+    through the same limit-checked primitive as the HTML route (422 outside the
+    az/el envelope, 409 unconfigured, 502 on a transport error) and logs the slew
+    to the running observation. Returns ``{ok, az_deg, el_deg}``."""
+    station = default_station(session)
+    _do_slew(station, body.az_deg, body.el_deg)
+    _log_slew(session, f"Rotator slew to az {body.az_deg:.1f}° / el {body.el_deg:.1f}° (MCP).")
+    return {"ok": True, "az_deg": body.az_deg, "el_deg": body.el_deg}
 
 
 @router.post("/rotator/stop")

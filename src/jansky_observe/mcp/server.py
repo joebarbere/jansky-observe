@@ -47,8 +47,10 @@ def build_mcp(app: FastAPI) -> FastMCP:
         name="jansky-observe",
         instructions=(
             "Observation management for the Discovery Dish hydrogen-line station. "
-            "Read tools + safe verbs only; there is no bias-tee control and no delete "
-            "verb, by design. Checklist ticks you perform are recorded as by='claude'."
+            "Read tools + safe verbs; there is no bias-tee control and no delete verb, "
+            "by design. The one verb that moves hardware is slew_rotator (roadmap M9) — "
+            "it is hard-limit-checked and logged; use it deliberately. Checklist ticks "
+            "you perform are recorded as by='claude'."
         ),
     )
 
@@ -108,6 +110,26 @@ def build_mcp(app: FastAPI) -> FastMCP:
         """The capture daemon's live status: source, capture state, disk free,
         projected rates, sticky overrun flag."""
         return await _get(app, "/api/capture/status")
+
+    @mcp.tool
+    async def get_rotator_status() -> dict[str, Any]:
+        """The az/el rotator's state (roadmap M9): kind (none/sim/rotctl/easycomm),
+        whether it's configured and reachable, the live az/el readback, the hard
+        slew limits, the park position, and the drift-tracking state. Best-effort
+        and read-only — reports reachable=false with an error for an unreachable
+        Drive rather than failing."""
+        return await _get(app, "/api/rotator")
+
+    @mcp.tool
+    async def slew_rotator(az_deg: float, el_deg: float) -> dict[str, Any]:
+        """Point the rotator at an az/el — THE ONE MCP VERB THAT MOVES HARDWARE.
+        Use it deliberately: it physically slews the dish. It is hard-limit-checked
+        against the station's az/el envelope (refused with 422 outside the limits),
+        409 if no rotator is configured, and every slew is logged to the running
+        observation's timeline. It never enables the bias tee or touches capture.
+        To point at a catalog source, read its current az/el from get_pointing
+        (offsets already applied) and pass those. Returns {ok, az_deg, el_deg}."""
+        return await _post_json(app, "/api/rotator/slew", {"az_deg": az_deg, "el_deg": el_deg})
 
     @mcp.tool
     async def get_diagnostics() -> dict[str, Any]:

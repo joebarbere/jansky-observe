@@ -132,6 +132,18 @@ def test_stop_and_park(client: TestClient) -> None:
     assert client.post("/rotator/park", follow_redirects=False).status_code == 303
 
 
+def test_json_slew_endpoint(client: TestClient) -> None:
+    _configure(client)
+    resp = client.post("/api/rotator/slew", json={"az_deg": 90.0, "el_deg": 40.0})
+    assert resp.status_code == 200
+    assert resp.json() == {"ok": True, "az_deg": 90.0, "el_deg": 40.0}
+    # out of limits → 422
+    _configure(client, el_min_deg=0.0)
+    assert (
+        client.post("/api/rotator/slew", json={"az_deg": 90.0, "el_deg": -5.0}).status_code == 422
+    )
+
+
 # ---- slew to target -----------------------------------------------------------
 
 

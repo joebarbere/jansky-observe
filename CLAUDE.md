@@ -156,8 +156,15 @@ tagged v1.0.0 yet), shifting the table.
   (`_auto_slew_to_source`, best-effort — never fails the capture). Note: the `sim` rotator is
   created per call (stateless readback across HTTP calls); real transports hold state in hardware,
   and tracking decisions use app-level last-commanded state, not rotator readback, so this is fine.
-  Remaining M9 piece: (4) `get_rotator_status` + the guarded `slew_rotator` MCP verb + the
-  USB-serial udev rule (→ install.sh change → QEMU gate at the v0.10.0 release).
+- **Rotator MCP verbs + udev** (piece 4): `get_rotator_status` (read-only) and **`slew_rotator`**
+  (az/el) — **the first MCP verb that moves hardware**, proxying the new `POST /api/rotator/slew`
+  JSON endpoint through the same limit-checked `slew` primitive (422 outside the envelope, 409
+  unconfigured, logged to the timeline; it never touches the bias tee or capture). MCP surface is
+  now **22 tools**; the FastMCP instructions string names `slew_rotator` as the sole hardware verb.
+  The Discovery Drive's USB-serial bridge gets udev rules (CP210x/CH340/Espressif → a stable
+  `/dev/jansky-rotator` symlink, GROUP=plugdev) in `deploy/udev/` + the `install.sh` heredoc
+  (byte-identical, CI drift-checked; the trigger now matches `tty` too). **This changes
+  `install.sh` → the QEMU gate is required at the v0.10.0 release.** M9 is now feature-complete.
 
 **M8 (v0.9.0 "Research bridge & guides") shipped** — released as `v0.9.1` (see
 `plans/roadmap-post-v0.6.md` and `CHANGES.md`). Its pieces:
