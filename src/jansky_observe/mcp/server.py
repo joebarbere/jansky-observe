@@ -252,6 +252,18 @@ def build_mcp(app: FastAPI) -> FastMCP:
         return await _post_json(app, f"/api/observations/{observation_id}/report", {})
 
     @mcp.tool
+    async def get_observation_bundle(observation_id: int) -> dict[str, Any]:
+        """The codified observation bundle manifest (roadmap M8, jansky-research
+        plan 78's input format): the station uuid, the observation with its
+        pointing, and a per-capture block carrying SDR settings (gain, center
+        freq, sample rate), LST at start, timestamps, cal-epoch reference, and
+        classifier verdicts. This is the machine-readable provenance in one call;
+        the averaged-spectrum arrays themselves download as the .npz files in the
+        zip at GET /api/observations/{id}/bundle (or fetch per capture with
+        get_spectrum). Read-only."""
+        return await _get(app, f"/api/observations/{observation_id}/bundle.json")
+
+    @mcp.tool
     async def export_capture(capture_id: int, format: str = "virgo_csv") -> dict[str, Any]:
         """Export a capture's averaged spectrum for the amateur-HI ecosystem:
         format="virgo_csv" (Virgo two-column CSV) or "ezra_txt" (ezRA ezCol .txt;

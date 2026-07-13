@@ -163,6 +163,11 @@
     <a href="/observations/{{ obs.id }}/report.pdf">Download report PDF</a>
     <span class="muted">(404 until a report has been built)</span>
   </div>
+  <div class="row" style="margin-top: 0.5rem;">
+    <a class="btn btn-small" href="/api/observations/{{ obs.id }}/bundle">Download data bundle (.zip)</a>
+    <span class="muted">JSON manifest + averaged-spectrum .npz per capture — the research
+      export (station UUID, pointing, LST, gain, cal-epoch, verdicts).</span>
+  </div>
 </section>
 
 <script>

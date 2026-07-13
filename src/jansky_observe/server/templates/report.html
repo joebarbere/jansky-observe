@@ -296,6 +296,17 @@
   {% endif %}
 </section>
 
+{% if bundle_json %}
+<section>
+  <h2>Observation bundle</h2>
+  <p class="muted" style="font-size: 8pt;">The machine-recoverable data block (schema
+    <span class="mono">jansky-observe.observation-bundle/1</span>): station UUID, pointing, LST,
+    gain, cal-epoch, and classifier verdicts. The same manifest downloads with the averaged-
+    spectrum <span class="mono">.npz</span> files at <span class="mono">/api/observations/{{ obs.id }}/bundle</span>.</p>
+  <pre class="mono" style="font-size: 6.5pt; white-space: pre-wrap; word-break: break-all;">{{ bundle_json }}</pre>
+</section>
+{% endif %}
+
 <p class="muted" style="font-size: 8pt;">
   Generated {{ generated_at | dt }} by jansky-observe {{ version }}.
   {% if station %}Station {{ station.name }} · <span class="mono">{{ station.uuid }}</span>.{% endif %}
