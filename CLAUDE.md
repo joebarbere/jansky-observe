@@ -136,9 +136,16 @@ tagged v1.0.0 yet), shifting the table.
   `make_rotator` are model-free; `server/rotator.py` is the Station glue (`rotator_from_station`,
   `station_allows` limit check, `park_position`). Station gains `rotator_kind`
   (none·sim·rotctl·easycomm) + host/port/serial/baud + az/el limits + park az/el (migration 11).
-  Remaining M9 pieces: (2) slew/readback/stop/park UI (HTML, limit-checked, logged), (3) tracking
-  mode + scheduler auto-slew, (4) `get_rotator_status` + the guarded `slew_rotator` MCP verb +
-  the USB-serial udev rule.
+- **Slew + readback UI** (piece 2, HTML-only, `routers/rotator.py` + `static/rotator.js`):
+  `GET /api/rotator` best-effort status (kind, live az/el readback, limits, park; never raises for
+  an unreachable Drive); `POST /rotator/slew|stop|park` and `POST /observations/{id}/slew_to_target`
+  (computes the source's offset-applied az/el via `source_pointing`) — every slew **limit-checked**
+  (`station_allows`, 422 outside; 409 when unconfigured) and **logged to the running observation's
+  timeline**. Config saved via `POST /station/rotator` (catalog.py); a rotator panel on `/station`
+  (readback poller + manual slew/stop/park) and a "Slew rotator to target" button on the
+  observation detail page. No MCP verbs yet.
+  Remaining M9 pieces: (3) tracking mode + scheduler auto-slew, (4) `get_rotator_status` + the
+  guarded `slew_rotator` MCP verb + the USB-serial udev rule.
 
 **M8 (v0.9.0 "Research bridge & guides") shipped** — released as `v0.9.1` (see
 `plans/roadmap-post-v0.6.md` and `CHANGES.md`). Its pieces:

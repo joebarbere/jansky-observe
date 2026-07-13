@@ -12,12 +12,13 @@ from __future__ import annotations
 
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Form, Request
+from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlmodel import col, select
 
 from jansky_observe import __version__
 from jansky_observe.models import (
+    ROTATOR_KINDS,
     ChecklistTemplateItem,
     Location,
     ObservationType,
@@ -315,6 +316,46 @@ def station_stellarium(
     """
     station = default_station(session)
     station.stellarium_url = stellarium_url.strip().rstrip("/") or None
+    station.updated_at = utcnow()
+    session.add(station)
+    session.commit()
+    return _see_other("/station")
+
+
+@router.post("/station/rotator")
+def station_rotator(
+    session: SessionDep,
+    rotator_kind: Annotated[str, Form()] = "none",
+    rotator_host: Annotated[str, Form()] = "",
+    rotator_port: Annotated[int, Form()] = 4533,
+    rotator_serial: Annotated[str, Form()] = "",
+    rotator_baud: Annotated[int, Form()] = 19200,
+    az_min_deg: Annotated[float, Form()] = 0.0,
+    az_max_deg: Annotated[float, Form()] = 360.0,
+    el_min_deg: Annotated[float, Form()] = 0.0,
+    el_max_deg: Annotated[float, Form()] = 90.0,
+    park_az_deg: Annotated[float, Form()] = 0.0,
+    park_el_deg: Annotated[float, Form()] = 90.0,
+) -> RedirectResponse:
+    """Save the station's az/el rotator config (roadmap M9): transport + the hard
+    slew limits + park position. ``rotator_kind`` must be one of
+    :data:`ROTATOR_KINDS` (422 otherwise)."""
+    if rotator_kind not in ROTATOR_KINDS:
+        raise HTTPException(status_code=422, detail=f"unknown rotator kind {rotator_kind!r}")
+    if az_min_deg > az_max_deg or el_min_deg > el_max_deg:
+        raise HTTPException(status_code=422, detail="slew limits: min must be ≤ max")
+    station = default_station(session)
+    station.rotator_kind = rotator_kind
+    station.rotator_host = rotator_host.strip()
+    station.rotator_port = rotator_port
+    station.rotator_serial = rotator_serial.strip()
+    station.rotator_baud = rotator_baud
+    station.az_min_deg = az_min_deg
+    station.az_max_deg = az_max_deg
+    station.el_min_deg = el_min_deg
+    station.el_max_deg = el_max_deg
+    station.park_az_deg = park_az_deg
+    station.park_el_deg = park_el_deg
     station.updated_at = utcnow()
     session.add(station)
     session.commit()

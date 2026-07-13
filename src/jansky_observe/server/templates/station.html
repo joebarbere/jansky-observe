@@ -41,6 +41,60 @@
 </section>
 
 <section class="pane pad">
+  <h2>Rotator — Discovery Drive (roadmap M9)</h2>
+  <p class="muted">Az/el rotator control. <strong>none</strong> = manual dish (default);
+    <strong>sim</strong> = in-process simulator; <strong>rotctl</strong> = the Drive's rotctld
+    NET protocol; <strong>easycomm</strong> = EasyComm II over USB-serial. The az/el limits are
+    hard — every slew is refused outside them and logged to the running observation.</p>
+
+  {% if station.rotator_kind != "none" %}
+  <div class="row" style="align-items: baseline; gap: 1rem;">
+    <strong>Readback:</strong>
+    <span id="rotator-readback" class="mono" data-endpoint="/api/rotator">querying…</span>
+  </div>
+  <div class="row" style="margin: 0.5rem 0;">
+    <form method="post" action="/rotator/slew" class="row" style="gap: 0.5rem;">
+      <label>az° <input type="number" step="0.1" name="az_deg" required style="width: 6rem;"></label>
+      <label>el° <input type="number" step="0.1" name="el_deg" required style="width: 6rem;"></label>
+      <button class="btn" type="submit">Slew</button>
+    </form>
+    <form method="post" action="/rotator/park"><button class="btn btn-small" type="submit"
+      title="slew to the park/stow position">Park</button></form>
+    <form method="post" action="/rotator/stop"><button class="btn btn-small btn-stop" type="submit"
+      title="halt motion now">Stop</button></form>
+  </div>
+  {% endif %}
+
+  <form method="post" action="/station/rotator" class="rotator-config">
+    <div class="row">
+      <label>kind
+        <select name="rotator_kind">
+          {% for kind in ["none", "sim", "rotctl", "easycomm"] %}
+          <option value="{{ kind }}" {% if station.rotator_kind == kind %}selected{% endif %}>{{ kind }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>host <input type="text" name="rotator_host" value="{{ station.rotator_host }}"
+                         size="14" placeholder="drive.local"></label>
+      <label>port <input type="number" name="rotator_port" value="{{ station.rotator_port }}" style="width: 6rem;"></label>
+      <label>serial <input type="text" name="rotator_serial" value="{{ station.rotator_serial }}"
+                           size="12" placeholder="/dev/ttyUSB0"></label>
+      <label>baud <input type="number" name="rotator_baud" value="{{ station.rotator_baud }}" style="width: 6rem;"></label>
+    </div>
+    <div class="row">
+      <label>az min° <input type="number" step="0.1" name="az_min_deg" value="{{ station.az_min_deg }}" style="width: 6rem;"></label>
+      <label>az max° <input type="number" step="0.1" name="az_max_deg" value="{{ station.az_max_deg }}" style="width: 6rem;"></label>
+      <label>el min° <input type="number" step="0.1" name="el_min_deg" value="{{ station.el_min_deg }}" style="width: 6rem;"></label>
+      <label>el max° <input type="number" step="0.1" name="el_max_deg" value="{{ station.el_max_deg }}" style="width: 6rem;"></label>
+      <label>park az° <input type="number" step="0.1" name="park_az_deg" value="{{ station.park_az_deg }}" style="width: 6rem;"></label>
+      <label>park el° <input type="number" step="0.1" name="park_el_deg" value="{{ station.park_el_deg }}" style="width: 6rem;"></label>
+      <button class="btn" type="submit">Save rotator config</button>
+    </div>
+  </form>
+  <script src="/static/rotator.js" defer></script>
+</section>
+
+<section class="pane pad">
   <h2>RF chain</h2>
   <ol class="rf-chain">
     {% for component in station.rf_chain %}<li>{{ component }}</li>{% endfor %}
