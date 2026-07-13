@@ -101,33 +101,36 @@ nothing by design.
 
 ## Current status
 
-M0–M7 have all shipped — **`v0.8.0` (M7 "Calibration & scheduling") is released**, on top of
-the M6 cockpit and the `v0.6.x` feature-complete base: capture (synthetic + real Airspy),
-observation records + wizard + observing ladder, the hline_v1 classifier + live badge + LSR
-axes, PDF reports + photos + Virgo/ezRA exporters, Stellarium view-slew + cross-check, HackRF
+M0–M8 have all shipped — **`v0.9.0` (M8 "Research bridge & guides") is released** (tagged
+`v0.9.1` after a format-check re-tag; `v0.9.0` is inert), on top of the M7 calibration/scheduling
+milestone, the M6 cockpit, and the `v0.6.x` feature-complete base: capture (synthetic + real
+Airspy), observation records + wizard + observing ladder, the hline_v1 classifier + live badge +
+LSR axes, PDF reports + photos + Virgo/ezRA exporters, Stellarium view-slew + cross-check, HackRF
 RFI sweep, gpsd locations, the cockpit (diagnostics + status bar + archive/purge + dark mode +
-localization + spectrum audio + `--fps` knob + RFI-survey template), and M7 (calibration
+localization + spectrum audio + `--fps` knob + RFI-survey template), M7 (calibration
 epochs + kinds, an offline sky chart, drift-scan campaigns with sidereal-day tagging, and the
-unattended transit scheduler + session timer) over 18 MCP tools. Schema is at `user_version`
-9. **v1.0.0 is not a feature: it is tagged after one real end-to-end observing campaign (plan →
-observe → confirm → PDF), from whatever `v0.x` is current** — prerequisites are physical
-(feed chain connected, Sun
-pointing calibration run). **M8 (v0.9.0, "Research bridge & guides") is the next
-milestone** (`plans/roadmap-post-v0.6.md`). The `hi4pi_xcheck` (v2 confirmation) still arrives via jansky-research
-plan 78. The HI4PI cross-check (`hi4pi_xcheck`, v2) remains **deferred to
-jansky-research plan 78** per plan §6 — the comparison harness is built once there and
-consumed here. The full plan lives in `plans/jansky_observe.md` — read it before any
-feature work.
+unattended transit scheduler + session timer), and M8 (a stable station UUID, the codified
+JSON+npz observation bundle, and printable build + observation guide PDFs) over 20 MCP tools.
+Schema is at `user_version` 10. **v1.0.0 is not a feature: it is tagged after one real
+end-to-end observing campaign (plan → observe → confirm → PDF), from whatever `v0.x` is
+current** — prerequisites are physical (feed chain connected, Sun pointing calibration run).
+**M9 (v1.1.0, "Rotator — Discovery Drive") is the next milestone**
+(`plans/roadmap-post-v0.6.md`). The one remaining M8 follow-up is cross-repo: the
+**jansky-research pull skill** (lives in `../jansky-research`, consumes the bundle over MCP) —
+jansky-observe's side of that contract (the bundle format + the tools it calls) already ships.
+The HI4PI cross-check (`hi4pi_xcheck`, v2) remains **deferred to jansky-research plan 78** per
+plan §6 — the comparison harness is built once there and consumed here. The full plan lives in
+`plans/jansky_observe.md` — read it before any feature work.
 
-**M8 (v0.9.0 "Research bridge & guides") is in progress** on `main` — its pieces land as
-individual PRs (`plans/roadmap-post-v0.6.md`); nothing is released yet (still `v0.8.0`).
+**M8 (v0.9.0 "Research bridge & guides") shipped** — released as `v0.9.1` (see
+`plans/roadmap-post-v0.6.md` and `CHANGES.md`). Its pieces:
 - **Station UUID** (schema `user_version` **10**, `_migration_10_station_uuid`):
   `Station.uuid` — a stable UUID4 (`models.new_station_uuid`) generated once at seed and
   backfilled onto existing stations by migration 10 (the column is indexed, so the migration
   adds it under a `PRAGMA table_info` guard, backfills a generated UUID per row, and re-creates
   `ix_station_uuid`). It is the station's permanent *machine* identity, distinct from the
-  editable `name`. Surfaced by `GET /api/station` + the `get_station_identity` MCP tool (**now
-  19 tools**), shown on the `/station` page, and stamped into the PDF report footer. It is
+  editable `name`. Surfaced by `GET /api/station` + the `get_station_identity` MCP tool,
+  shown on the `/station` page, and stamped into the PDF report footer. It is
   jansky-research plan 78's per-station key and the anchor the codified observation bundle carries.
 - **Codified observation bundle** (`export/bundle.py`, `BUNDLE_SCHEMA =
   "jansky-observe.observation-bundle/1"`): the documented JSON+npz export plan 78 consumes.
@@ -135,7 +138,7 @@ individual PRs (`plans/roadmap-post-v0.6.md`); nothing is released yet (still `v
   at each capture's start, timestamps, SDR settings/gain, cal-epoch ref, classifier verdicts);
   `write_observation_bundle` zips it as `bundle.json` + one self-describing averaged-spectrum
   `capture-<id>.npz` per on-disk npz capture. Served at `GET /api/observations/{id}/bundle.json`
-  (manifest) and `/bundle` (zip), via the `get_observation_bundle` MCP tool (**now 20 tools**),
+  (manifest) and `/bundle` (zip), via the `get_observation_bundle` MCP tool,
   linked from the observation detail page, and **embedded verbatim in the PDF report** so a
   report alone is machine-recoverable. The one-way Virgo/ezRA exporters are deliberately left as
   strict third-party formats — the UUID/provenance rides this bundle, not those.
