@@ -65,6 +65,12 @@
     <tr><th>computed az / el at start</th><td>{% if obs.computed_az_deg is not none %}{{ "%.1f"|format(obs.computed_az_deg) }}° / {{ "%.1f"|format(obs.computed_el_deg) }}°{% else %}—{% endif %}</td></tr>
     <tr><th>station offsets</th><td>az {{ "%+.2f"|format(station.pointing_offset_az_deg) }}° · el {{ "%+.2f"|format(station.pointing_offset_el_deg) }}°</td></tr>
   </table>
+  {% if station.rotator_kind != "none" %}
+  <form method="post" action="/observations/{{ obs.id }}/slew_to_target" class="row" style="margin-top: 0.5rem;">
+    <button class="btn" type="submit" title="slew the rotator to this source's current computed az/el (offsets applied)">Slew rotator to target</button>
+    <span class="muted">→ {{ source.name }}, logged to the timeline ({{ station.rotator_kind }})</span>
+  </form>
+  {% endif %}
 </section>
 
 <section class="pane pad">
