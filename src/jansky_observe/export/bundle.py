@@ -162,9 +162,7 @@ def build_observation_manifest(session: Session, observation: Observation) -> di
         .order_by(col(Observer.name))
     ).all()
     captures = session.exec(
-        select(Capture)
-        .where(Capture.observation_id == observation.id)
-        .order_by(col(Capture.id))
+        select(Capture).where(Capture.observation_id == observation.id).order_by(col(Capture.id))
     ).all()
 
     az_deg = (
@@ -237,7 +235,9 @@ def build_observation_manifest(session: Session, observation: Observation) -> di
     }
 
 
-def _write_capture_npz(capture: Capture, block: dict[str, Any], station_uuid: str, out: Path) -> None:
+def _write_capture_npz(
+    capture: Capture, block: dict[str, Any], station_uuid: str, out: Path
+) -> None:
     """Write one self-describing averaged-spectrum ``.npz`` (pickle-free).
 
     Carries the averaged spectrum plus the scalar provenance a consumer needs
@@ -266,7 +266,9 @@ def _write_capture_npz(capture: Capture, block: dict[str, Any], station_uuid: st
     )
 
 
-def write_observation_bundle(session: Session, observation: Observation, out_dir: str | Path) -> Path:
+def write_observation_bundle(
+    session: Session, observation: Observation, out_dir: str | Path
+) -> Path:
     """Write the observation bundle (manifest + per-capture npz) as one zip.
 
     Parameters
@@ -292,9 +294,7 @@ def write_observation_bundle(session: Session, observation: Observation, out_dir
 
     captures = {
         c.id: c
-        for c in session.exec(
-            select(Capture).where(Capture.observation_id == observation.id)
-        ).all()
+        for c in session.exec(select(Capture).where(Capture.observation_id == observation.id)).all()
     }
     staging = out_dir / f".observation-{observation.id}-npz"
     staging.mkdir(parents=True, exist_ok=True)

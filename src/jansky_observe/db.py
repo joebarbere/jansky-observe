@@ -228,15 +228,11 @@ def _migration_10_station_uuid(conn: Connection) -> None:
 
     columns = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(station)")}
     if "uuid" not in columns:
-        conn.exec_driver_sql(
-            "ALTER TABLE station ADD COLUMN uuid VARCHAR NOT NULL DEFAULT ''"
-        )
+        conn.exec_driver_sql("ALTER TABLE station ADD COLUMN uuid VARCHAR NOT NULL DEFAULT ''")
     for (station_id,) in conn.exec_driver_sql(
         "SELECT id FROM station WHERE uuid IS NULL OR uuid = ''"
     ).fetchall():
-        conn.exec_driver_sql(
-            "UPDATE station SET uuid = ? WHERE id = ?", (str(uuid4()), station_id)
-        )
+        conn.exec_driver_sql("UPDATE station SET uuid = ? WHERE id = ?", (str(uuid4()), station_id))
     conn.exec_driver_sql("CREATE INDEX IF NOT EXISTS ix_station_uuid ON station (uuid)")
 
 
