@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}guides — jansky-observe{% endblock %}
+{% block content %}
+<h1>Guides</h1>
+<p class="muted">Printable, check-off-able PDFs — rebuilt live from the plan and the seeded
+  checklists. The observation guide always matches the current session wizard.</p>
+
+<div class="cards">
+  {% for key, title, blurb in guides %}
+  <section class="pane pad">
+    <h2>{{ title }}</h2>
+    <p class="muted">{{ blurb }}</p>
+    <a class="btn" href="/guides/{{ key }}.pdf">Download {{ key }} guide (PDF)</a>
+  </section>
+  {% endfor %}
+</div>
+{% endblock %}

@@ -139,6 +139,18 @@ individual PRs (`plans/roadmap-post-v0.6.md`); nothing is released yet (still `v
   linked from the observation detail page, and **embedded verbatim in the PDF report** so a
   report alone is machine-recoverable. The one-way Virgo/ezRA exporters are deliberately left as
   strict third-party formats — the UUID/provenance rides this bundle, not those.
+- **Guide PDFs** (`export/guides.py`, `export/flowsvg.py`, `templates/guide.html`, `routers/
+  guides.py`): a **build guide** (authored from the plan's hardware chain) and an **observation
+  guide** (generated from the seeded ObservationTypes so it always matches the wizard), both
+  through the WeasyPrint pipeline at `GET /guides/{build,observation}.pdf` (index at `/guides`).
+  WeasyPrint runs no JS, so mermaid can't render at build time — the per-stage flow diagrams are
+  **deterministic inline SVG** (`vertical_flow_svg`) instead. Two house rules for every
+  step-type guide PDF, enforced by tests: **every step gets a checkbox**, and a build stage's
+  **diagram nodes are a subset of its checkbox parts** (box → part → checkbox). The build guide
+  reinforces the **bias-tee-OFF** invariant with a safety callout and an explicit "internal tee
+  must never be enabled" step. Remaining M8 work: the **jansky-research pull skill** (cross-repo,
+  lives in `../jansky-research`) — jansky-observe's side of that contract (the bundle format +
+  the MCP tools it calls) is already done.
 
 **M6 (v0.7.0 "station cockpit") shipped** — all seven pieces below, released as `v0.7.0`
 (see `plans/roadmap-post-v0.6.md`).

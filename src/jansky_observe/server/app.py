@@ -48,6 +48,7 @@ from jansky_observe.server.routers import (
     campaigns,
     catalog,
     gps,
+    guides,
     observations,
     photos,
     reports,
@@ -303,6 +304,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
     application.include_router(sky.router)
     application.include_router(photos.router)
     application.include_router(reports.router)
+    application.include_router(guides.router)
     # The MCP surface (plan §12.4): Claude as a console peer of the browser UI.
     from jansky_observe.mcp import mount_mcp
 
