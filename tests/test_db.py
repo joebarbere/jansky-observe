@@ -308,6 +308,30 @@ def test_migration_8_upgrade_from_version_7_keeps_data(tmp_path: Path) -> None:
     assert _user_version(engine) == max(version for version, _ in db.MIGRATIONS)
 
 
+def test_migration_9_fresh_db_has_schedule(tmp_path: Path) -> None:
+    engine = db.init_db(tmp_path / "data")
+    assert _user_version(engine) == max(version for version, _ in db.MIGRATIONS)
+    assert "schedule" in inspect(engine).get_table_names()
+    cols = {c["name"] for c in inspect(engine).get_columns("schedule")}
+    assert {"name", "source_id", "lead_min", "run_min", "format", "repeat", "enabled"} <= cols
+
+
+def test_migration_9_upgrade_from_version_8_adds_table(tmp_path: Path) -> None:
+    engine = db.get_engine(tmp_path / "data")
+    with engine.begin() as conn:
+        for version, apply in db.MIGRATIONS[:8]:  # migrations 1..8
+            apply(conn)
+            conn.exec_driver_sql(f"PRAGMA user_version = {version}")
+        conn.exec_driver_sql("DROP TABLE IF EXISTS schedule")
+    assert _user_version(engine) == 8
+    assert "schedule" not in inspect(engine).get_table_names()
+    db.migrate(engine)
+    assert _user_version(engine) == max(version for version, _ in db.MIGRATIONS)
+    assert "schedule" in inspect(engine).get_table_names()
+    db.migrate(engine)  # re-run no-op
+    assert _user_version(engine) == max(version for version, _ in db.MIGRATIONS)
+
+
 def test_migration_5_seeds_the_type_into_a_version_4_db(tmp_path: Path) -> None:
     from jansky_observe.models import ChecklistTemplateItem, ObservationType
 
