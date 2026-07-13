@@ -161,8 +161,8 @@ feature work.
   observation detail (`_rfi_comparison.html`) and in the PDF report. Read-only over the CSVs;
   no new MCP verbs.
 
-**M7 (v0.8.0 "Calibration & scheduling") is in progress** — see `plans/roadmap-post-v0.6.md`.
-Landed so far:
+**M7 (v0.8.0 "Calibration & scheduling") is feature-complete** — all four pieces below
+(`plans/roadmap-post-v0.6.md`); `v0.8.0` is cut with `/release` once these merge.
 - **Calibration captures**: `CalibrationEpoch` + `Capture.kind` (science / ref_load / cold_sky /
   hot_ground) + `Capture.cal_epoch_id` (migration 6 = table + columns; migration 7 = reseed for
   the "Calibration sweep" ObservationType). A science capture is stamped at registration with
@@ -183,7 +183,17 @@ Landed so far:
   campaigns.py`: a `/campaigns` page + `/campaigns/{id}` detail grouping captures into passes
   by sidereal day (each with its LST for stacking) + `POST /campaigns` / `.../status` / `POST
   /captures/{id}/campaign` (HTML-only) + `GET /api/campaigns[/{id}]`. Nav link "Campaigns".
-  Still to come in M7: scheduler + session timer.
+- **Scheduler + session timer**: a `Schedule` (source, lead_min, run_min, format, repeat
+  once|daily, enabled — migration 9). `server/scheduler.py` runs a lifespan loop
+  (`scheduler_loop` → `scheduler_tick` every 20 s) that, per enabled schedule, computes the
+  firing window `[transit − lead, +run]` (astropy) and drives the daemon over the control
+  channel: `next_decision` (pure, tested) starts a capture when a window is open **and nothing
+  is capturing** (the daemon stays the only SDR owner), stops it at the window end (registers
+  it, disables a `once`), and the disk-red **guardrail** (`would_exceed_disk_red`) refuses a
+  run that would fill the disk. `routers/schedules.py`: `/schedules` CRUD page + `GET
+  /api/schedules` (with the next window) + `GET /api/scheduler_status`. Nav link "Schedules".
+  Session timer: a client-side elapsed readout (`ui.js`, `.session-timer[data-since]`) on a
+  running observation. HTML-only; no new MCP verbs.
 
 ## Skills & agents
 

@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}schedules — jansky-observe{% endblock %}
+{% block content %}
+<h1>Scheduled captures</h1>
+<p class="muted">
+  Unattended captures: each one starts <b>lead</b> minutes before its source's transit and runs
+  for <b>run</b> minutes. The daemon stays the only SDR owner — the server just drives it, never
+  starting a capture while one is already running, and refusing any run that would fill the disk
+  past the red threshold.
+</p>
+
+<section class="pane pad">
+  <h2>Scheduler</h2>
+  {% if state.running_schedule_id %}
+  <p>Running schedule <b>#{{ state.running_schedule_id }}</b>{% if state.stop_at %} until {{ state.stop_at | dt }}{% endif %}.</p>
+  {% else %}
+  <p class="muted">Idle. {{ state.note or "waiting for the next window" }}</p>
+  {% endif %}
+</section>
+
+<section class="pane pad">
+  <h2>New schedule</h2>
+  <form method="post" action="/schedules" class="row">
+    <input type="text" name="name" placeholder="name" required>
+    <select name="source_id" required>
+      {% for s in sources %}<option value="{{ s.id }}">{{ s.name }}</option>{% endfor %}
+    </select>
+    <label>lead <input type="number" step="any" name="lead_min" value="5" size="4"> min</label>
+    <label>run <input type="number" step="any" name="run_min" value="30" size="4"> min</label>
+    <select name="format">{% for f in formats %}<option value="{{ f }}">{{ f }}</option>{% endfor %}</select>
+    <select name="repeat">{% for r in repeats %}<option value="{{ r }}"{% if r == 'daily' %} selected{% endif %}>{{ r }}</option>{% endfor %}</select>
+    <button class="btn" type="submit">Add</button>
+  </form>
+</section>
+
+{% if rows %}
+<table class="list">
+  <tr><th>name</th><th>source</th><th>lead/run</th><th>format</th><th>repeat</th><th>enabled</th><th>next window</th><th></th></tr>
+  {% for r in rows %}
+  <tr>
+    <td>{{ r.name }}</td>
+    <td>{{ r.source or "?" }}</td>
+    <td>{{ "%g"|format(r.lead_min) }} / {{ "%g"|format(r.run_min) }} min</td>
+    <td>{{ r.format }}</td>
+    <td>{{ r.repeat }}</td>
+    <td><span class="badge {{ 'running' if r.enabled else 'idle' }}">{{ "on" if r.enabled else "off" }}</span></td>
+    <td>{% if r.next_start %}{{ r.next_start | dt }} → {{ r.next_stop | dt }}{% else %}—{% endif %}</td>
+    <td class="row">
+      <form method="post" action="/schedules/{{ r.id }}/toggle"><button class="btn btn-small" type="submit">{{ "Disable" if r.enabled else "Enable" }}</button></form>
+      <form method="post" action="/schedules/{{ r.id }}/delete" onsubmit="return confirm('Delete this schedule?');"><button class="btn btn-small btn-stop" type="submit">Delete</button></form>
+    </td>
+  </tr>
+  {% endfor %}
+</table>
+{% else %}
+<p class="muted">No schedules yet — add one above.</p>
+{% endif %}
+{% endblock %}

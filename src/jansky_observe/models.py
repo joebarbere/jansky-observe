@@ -33,6 +33,7 @@ __all__ = [
     "Observer",
     "Photo",
     "RadioSource",
+    "Schedule",
     "Station",
     "utcnow",
 ]
@@ -158,6 +159,35 @@ class ChecklistTemplateItem(SQLModel, table=True):
     text: str
     #: ``True`` = required, ``False`` = recommended.
     required: bool = True
+
+
+class Schedule(SQLModel, table=True):
+    """An unattended capture schedule (roadmap M7, plans 79/84).
+
+    Fires a capture that starts ``lead_min`` before the source's transit and
+    runs ``run_min``. ``repeat`` is ``"once"`` (disabled after firing) or
+    ``"daily"``. The server's scheduler loop is the trigger; the capture daemon
+    stays the only SDR owner. ``last_run_at`` marks the last window fired so a
+    window fires once.
+    """
+
+    __tablename__ = "schedule"
+
+    id: int | None = Field(default=None, primary_key=True)
+    name: str = Field(index=True)
+    source_id: int = Field(foreign_key="radio_source.id")
+    #: Start this many minutes before the source's transit.
+    lead_min: float = 5.0
+    #: Run for this many minutes.
+    run_min: float = 30.0
+    #: Capture format — ``"npz"`` or ``"sigmf"``.
+    format: str = "npz"
+    #: ``"once"`` or ``"daily"``.
+    repeat: str = "daily"
+    enabled: bool = True
+    #: When the most recent window fired (its window start), or ``None``.
+    last_run_at: datetime | None = None
+    created_at: datetime = Field(default_factory=utcnow)
 
 
 class Observation(SQLModel, table=True):

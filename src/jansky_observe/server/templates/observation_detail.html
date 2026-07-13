@@ -3,6 +3,12 @@
 {% block content %}
 <h1>{{ obs.name }} <span class="badge {{ obs.status }}">{{ obs.status }}</span></h1>
 
+{% if obs.status == "running" and obs.actual_start %}
+<p class="muted">Session timer — elapsed
+  <b class="session-timer" data-since="{{ obs.actual_start.strftime('%Y-%m-%dT%H:%M:%SZ') }}">—</b>
+</p>
+{% endif %}
+
 <div class="row actions">
   {% if obs.status == "planned" %}
   <a class="btn" href="/wizard/{{ obs.id }}/step3">Resume wizard</a>

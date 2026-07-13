@@ -69,9 +69,24 @@
     localizeAll();
   }
 
+  // --- session timer: elapsed since a running observation started --------
+  function pad2(n) { return String(n).padStart(2, "0"); }
+  function tickTimers() {
+    var nodes = document.querySelectorAll(".session-timer[data-since]");
+    for (var i = 0; i < nodes.length; i++) {
+      var since = Date.parse(nodes[i].getAttribute("data-since"));
+      if (isNaN(since)) continue;
+      var s = Math.max(0, Math.floor((Date.now() - since) / 1000));
+      var h = Math.floor(s / 3600);
+      nodes[i].textContent = pad2(h) + ":" + pad2(Math.floor((s % 3600) / 60)) + ":" + pad2(s % 60);
+    }
+  }
+
   function init() {
     applyTheme(currentTheme());
     localizeAll();
+    tickTimers();
+    setInterval(tickTimers, 1000);
     var themeBtn = document.getElementById("theme-toggle");
     if (themeBtn) themeBtn.addEventListener("click", cycleTheme);
     var timeBtn = document.getElementById("time-toggle");

@@ -188,6 +188,28 @@ def _migration_8_driftscan(conn: Connection) -> None:
         conn.exec_driver_sql("ALTER TABLE capture ADD COLUMN sidereal_day INTEGER")
 
 
+def _migration_9_schedule(conn: Connection) -> None:
+    """Add the unattended-capture ``schedule`` table (roadmap M7, plans 79/84).
+    Frozen DDL matching the M7 model; ``IF NOT EXISTS`` makes it a no-op on a
+    fresh database.
+    """
+    conn.exec_driver_sql(
+        "CREATE TABLE IF NOT EXISTS schedule ("
+        " id INTEGER NOT NULL PRIMARY KEY,"
+        " name VARCHAR NOT NULL,"
+        " source_id INTEGER NOT NULL,"
+        " lead_min FLOAT NOT NULL DEFAULT 5.0,"
+        " run_min FLOAT NOT NULL DEFAULT 30.0,"
+        " format VARCHAR NOT NULL DEFAULT 'npz',"
+        " repeat VARCHAR NOT NULL DEFAULT 'daily',"
+        " enabled BOOLEAN NOT NULL DEFAULT 1,"
+        " last_run_at DATETIME,"
+        " created_at DATETIME NOT NULL,"
+        " FOREIGN KEY(source_id) REFERENCES radio_source (id)"
+        ")"
+    )
+
+
 MIGRATIONS: list[tuple[int, Callable[[Connection], None]]] = [
     (1, _migration_1_initial_schema),
     (2, _migration_2_station_stellarium_url),
@@ -197,6 +219,7 @@ MIGRATIONS: list[tuple[int, Callable[[Connection], None]]] = [
     (6, _migration_6_calibration),
     (7, _migration_7_calibration_sweep_type),
     (8, _migration_8_driftscan),
+    (9, _migration_9_schedule),
 ]
 
 
