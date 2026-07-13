@@ -1,0 +1,109 @@
+{# Guide PDF template (roadmap M8) — rendered by export/guides.py with plain
+   Jinja2 and printed by WeasyPrint. Print CSS inline; never served to a browser.
+   House rules: every step gets a checkbox; a build stage's diagram nodes are its
+   checkbox parts. #}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>{{ guide.title }} — jansky-observe</title>
+  <style>
+    @page {
+      size: A4;
+      margin: 18mm 15mm 20mm 15mm;
+      @top-center { content: string(guide-title); font-size: 8pt; color: #888; }
+      @bottom-right { content: counter(page) " / " counter(pages); font-size: 8pt; color: #888; }
+      @bottom-left { content: "jansky-observe {{ version }}"; font-size: 8pt; color: #888; }
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font: 10.5pt/1.5 "DejaVu Sans", sans-serif; color: #1a2230; }
+    h1 { string-set: guide-title content(); font-size: 20pt; margin-bottom: 1mm; }
+    .subtitle { color: #5a6577; font-size: 12pt; margin-bottom: 4mm; }
+    .intro { margin-bottom: 6mm; }
+    h2 {
+      font-size: 13pt; margin-bottom: 2mm; padding-bottom: 1mm;
+      border-bottom: 1px solid #c6cdd8;
+    }
+    h3 { font-size: 9pt; color: #5a6577; font-weight: normal; margin: 3mm 0 1mm; text-transform: uppercase; letter-spacing: 0.06em; }
+    .stage { break-inside: avoid; margin-bottom: 8mm; }
+    .stage-summary { color: #5a6577; margin-bottom: 2mm; }
+    .overview { break-inside: avoid; margin-bottom: 7mm; }
+
+    /* The flow diagrams: strokes/arrows follow currentColor. */
+    .flow { color: #4a5568; max-width: 78mm; height: auto; }
+    .overview .flow { max-width: 64mm; }
+
+    ul.checks { list-style: none; }
+    ul.checks li { padding: 0.9mm 0 0.9mm 7mm; text-indent: -7mm; break-inside: avoid; }
+    /* The printable checkbox — a real bordered square, not a font glyph. */
+    .cb {
+      display: inline-block; width: 3.2mm; height: 3.2mm; margin-right: 2.4mm;
+      border: 0.4mm solid #6b7686; border-radius: 0.6mm; vertical-align: -0.4mm;
+    }
+    .part-note { color: #7a8699; font-size: 9pt; }
+    .safety {
+      background: #fdf3f3; border-left: 1mm solid #d05555; padding: 2mm 3mm;
+      margin: 2mm 0; break-inside: avoid;
+    }
+    .muted { color: #7a8699; }
+    .mono { font-family: "DejaVu Sans Mono", monospace; font-size: 9pt; }
+    .cols { display: flex; gap: 6mm; align-items: flex-start; }
+    .cols .diagram { flex: 0 0 auto; }
+    .cols .lists { flex: 1 1 auto; }
+  </style>
+</head>
+<body>
+
+<h1>{{ guide.title }}</h1>
+<p class="subtitle">{{ guide.subtitle }}</p>
+<p class="intro">{{ guide.intro }}</p>
+
+{% if guide.overview %}
+<section class="overview">
+  <h3>Overview</h3>
+  {{ flow_svg(guide.overview|list) | safe }}
+</section>
+{% endif %}
+
+{% for stage in guide.stages %}
+<section class="stage">
+  <h2>{{ loop.index }}. {{ stage.title }}</h2>
+  {% if stage.summary %}<p class="stage-summary">{{ stage.summary }}</p>{% endif %}
+
+  {% if 'bias tee stays OFF' in stage.summary %}
+  <p class="safety"><strong>Safety:</strong> the feed is powered only by the inline injector.
+    The Airspy internal bias tee stays OFF — always.</p>
+  {% endif %}
+
+  <div class="cols">
+    {% if stage.nodes %}
+    <div class="diagram">{{ flow_svg(stage.nodes|list) | safe }}</div>
+    {% endif %}
+    <div class="lists">
+      {% if stage.parts %}
+      <h3>Parts</h3>
+      <ul class="checks">
+        {% for part in stage.parts %}
+        <li><span class="cb"></span>{{ part.label }}{% if part.note %}
+          <span class="part-note">— {{ part.note }}</span>{% endif %}</li>
+        {% endfor %}
+      </ul>
+      {% endif %}
+
+      <h3>Steps</h3>
+      <ul class="checks">
+        {% for step in stage.steps %}
+        <li><span class="cb"></span>{{ step }}</li>
+        {% endfor %}
+      </ul>
+    </div>
+  </div>
+</section>
+{% endfor %}
+
+<p class="muted" style="font-size: 8pt;">
+  Generated {{ generated_at }} by jansky-observe {{ version }}. Print and check off as you go.
+</p>
+
+</body>
+</html>
