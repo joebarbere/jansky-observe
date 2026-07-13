@@ -30,12 +30,14 @@ flowchart LR
 
 ## Status
 
-**Feature-complete (M0–M6 all shipped):** capture (synthetic + real Airspy), observation
+**Feature-complete (M0–M7 all shipped):** capture (synthetic + real Airspy), observation
 records + session wizard + observing ladder, the `hline_v1` classifier with live HI badge and
 LSR axes, PDF reports + photos + Virgo/ezRA exporters, Stellarium cross-check, HackRF RFI
-sweep, gpsd locations, and the **`v0.7.0` station cockpit** (status bar, diagnostics MCP,
-archive/soft-delete, dark mode + localization, spectrum audio, an `--fps` knob, and the
-RFI-survey template) over an 18-tool MCP surface. **`v1.0.0` is not a feature** — it is tagged
+sweep, gpsd locations, the **`v0.7.0` station cockpit** (status bar, diagnostics MCP,
+archive/soft-delete, dark mode + localization, spectrum audio, `--fps` knob, RFI-survey
+template), and the **`v0.8.0` calibration & scheduling** milestone (calibration epochs, an
+offline sky chart, drift-scan campaigns with sidereal-day stacking, and an unattended
+transit scheduler) over an 18-tool MCP surface. **`v1.0.0` is not a feature** — it is tagged
 after one real end-to-end observing campaign (plan → observe → confirm → PDF). See
 `CHANGES.md` for the full version history and `plans/roadmap-post-v0.6.md` for what comes
 after.
@@ -49,8 +51,8 @@ after.
 | `v0.5.0` | M4 | Reports & photos: PDF export, Virgo/ezRA exporters | ✅ done |
 | `v0.6.0` | M5 | Feature-complete — the `v1.0.0` release candidate | ✅ done |
 | `v0.7.0` | M6 | Station cockpit: status bar, diagnostics MCP, audio, dark mode, archive | ✅ done |
-| `v0.8.0` | M7 | Calibration captures, scheduler, drift-scan campaigns, sky chart | ⏭ next |
-| `v0.9.0` | M8 | Research bridge: station UUID, export bundle, build-guide PDFs | 📋 planned |
+| `v0.8.0` | M7 | Calibration captures, scheduler, drift-scan campaigns, sky chart | ✅ done |
+| `v0.9.0` | M8 | Research bridge: station UUID, export bundle, build-guide PDFs | ⏭ next |
 | `v1.0.0` | — | Tagged after one real campaign, from whatever v0.x is current | 📋 planned |
 | `v1.1.0` | M9 | Rotator: Discovery Drive (rotctl TCP / EasyComm II) | 📋 planned |
 

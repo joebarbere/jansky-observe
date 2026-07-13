@@ -101,16 +101,18 @@ nothing by design.
 
 ## Current status
 
-M0–M6 have all shipped — **`v0.7.0` (M6 "station cockpit") is released**, on top of the
-`v0.6.x` feature-complete base: capture (synthetic + real Airspy), observation records +
-wizard + observing ladder, the hline_v1 classifier + live badge + LSR axes, PDF reports +
-photos + Virgo/ezRA exporters, Stellarium view-slew + cross-check, HackRF RFI sweep, gpsd
-locations, and the cockpit (diagnostics + status bar + archive/purge + dark mode +
-localization + spectrum audio + `--fps` knob + RFI-survey template) over 18 MCP tools —
-every plan-§12.6 Claude deliverable plus the M6 set. **v1.0.0 is not a feature: it is tagged
-after one real end-to-end observing campaign (plan → observe → confirm → PDF), from
-whatever `v0.x` is current** — prerequisites are physical (feed chain connected, Sun
-pointing calibration run). **M7 (v0.8.0, "Calibration & scheduling") is the next
+M0–M7 have all shipped — **`v0.8.0` (M7 "Calibration & scheduling") is released**, on top of
+the M6 cockpit and the `v0.6.x` feature-complete base: capture (synthetic + real Airspy),
+observation records + wizard + observing ladder, the hline_v1 classifier + live badge + LSR
+axes, PDF reports + photos + Virgo/ezRA exporters, Stellarium view-slew + cross-check, HackRF
+RFI sweep, gpsd locations, the cockpit (diagnostics + status bar + archive/purge + dark mode +
+localization + spectrum audio + `--fps` knob + RFI-survey template), and M7 (calibration
+epochs + kinds, an offline sky chart, drift-scan campaigns with sidereal-day tagging, and the
+unattended transit scheduler + session timer) over 18 MCP tools. Schema is at `user_version`
+9. **v1.0.0 is not a feature: it is tagged after one real end-to-end observing campaign (plan →
+observe → confirm → PDF), from whatever `v0.x` is current** — prerequisites are physical
+(feed chain connected, Sun
+pointing calibration run). **M8 (v0.9.0, "Research bridge & guides") is the next
 milestone** (`plans/roadmap-post-v0.6.md`). The `hi4pi_xcheck` (v2 confirmation) still arrives via jansky-research
 plan 78. The HI4PI cross-check (`hi4pi_xcheck`, v2) remains **deferred to
 jansky-research plan 78** per plan §6 — the comparison harness is built once there and
@@ -161,8 +163,8 @@ feature work.
   observation detail (`_rfi_comparison.html`) and in the PDF report. Read-only over the CSVs;
   no new MCP verbs.
 
-**M7 (v0.8.0 "Calibration & scheduling") is feature-complete** — all four pieces below
-(`plans/roadmap-post-v0.6.md`); `v0.8.0` is cut with `/release` once these merge.
+**M7 (v0.8.0 "Calibration & scheduling") shipped** — all four pieces below, released as
+`v0.8.0` (`plans/roadmap-post-v0.6.md`). **M8 (v0.9.0 "Research bridge & guides") is next.**
 - **Calibration captures**: `CalibrationEpoch` + `Capture.kind` (science / ref_load / cold_sky /
   hot_ground) + `Capture.cal_epoch_id` (migration 6 = table + columns; migration 7 = reseed for
   the "Calibration sweep" ObservationType). A science capture is stamped at registration with
