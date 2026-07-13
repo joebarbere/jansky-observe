@@ -6,6 +6,42 @@ milestones**). Work that landed outside a milestone gets a brief summary under t
 that shipped it. Maintained as part of `/release` — a release isn't finished until its
 section exists here.
 
+## v0.9.0 — 2026-07-12 — M8 "Research bridge & guides"
+
+The station's "data out" story and its first printable guides. Three pieces
+shipped in this repo; schema advances to `user_version` 10. No `install.sh`
+change (the migration runs on start). The fourth M8 piece — a pull skill that
+lives in the `jansky-research` repo — is cross-repo and follows separately; the
+jansky-observe side of that contract (the bundle format + the MCP tools it calls)
+ships here.
+
+- **Station UUID** (#31): a stable `Station.uuid` (UUID4) generated once at seed
+  and backfilled onto existing stations by migration 10 — the station's permanent
+  *machine* identity, distinct from the editable `name`, and jansky-research plan
+  78's per-station key. Surfaced by `GET /api/station` + the `get_station_identity`
+  MCP tool, shown on the `/station` page, and stamped into the PDF report footer.
+- **Codified observation bundle** (#32): one documented JSON+npz export per
+  observation (`export/bundle.py`, schema `jansky-observe.observation-bundle/1`) —
+  averaged spectra with pointing, LST, timestamps, gain, cal-epoch reference,
+  classifier verdicts, and the station UUID, exactly the format plan 78 consumes.
+  Served at `GET /api/observations/{id}/bundle.json` (manifest) and `/bundle` (a
+  zip of the manifest + one self-describing `capture-<id>.npz` per npz capture),
+  via the `get_observation_bundle` MCP tool, linked from the observation detail
+  page, and **embedded verbatim in the PDF report** so a report alone is
+  machine-recoverable. The one-way Virgo/ezRA exporters stay strict third-party
+  formats.
+- **Guide PDFs** (#33): a **build guide** (authored from the plan's hardware chain)
+  and an **observation guide** (generated from the seeded ObservationTypes, so it
+  always matches the session wizard), both through the WeasyPrint pipeline at
+  `GET /guides/{build,observation}.pdf` (index at `/guides`). WeasyPrint runs no
+  JS, so the per-stage flow diagrams are deterministic inline SVG. Two house rules
+  for every step-type guide PDF: every step gets a checkbox, and a build stage's
+  diagram nodes are its checkbox parts. The build guide reinforces the bias-tee-OFF
+  invariant with a safety callout.
+
+The MCP surface grows to **20 tools** (`get_station_identity`, `get_observation_bundle`
+added; still read + safe verbs only — no bias-tee control, no deletes).
+
 ## v0.8.0 — 2026-07-12 — M7 "Calibration & scheduling"
 
 The milestone the jansky-research station track (plans 78/79/80/84) was waiting for. Four
