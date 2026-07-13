@@ -6,6 +6,29 @@ milestones**). Work that landed outside a milestone gets a brief summary under t
 that shipped it. Maintained as part of `/release` — a release isn't finished until its
 section exists here.
 
+## v0.8.0 — 2026-07-12 — M7 "Calibration & scheduling"
+
+The milestone the jansky-research station track (plans 78/79/80/84) was waiting for. Four
+pieces; schema advances to `user_version` 9. No `install.sh` change (migrations run on start).
+
+- **Calibration captures** (#25): a `CalibrationEpoch` object + `Capture.kind` (science /
+  ref_load / cold_sky / hot_ground) + `Capture.cal_epoch_id`. Every science capture is stamped
+  at registration with the calibration epoch in effect; calibration captures are marked from
+  the observation's capture list. A `/calibration` page, a guided "Calibration sweep"
+  ObservationType, and cal-epoch provenance in the capture meta + the PDF report. Migrations 6, 7.
+- **Sky chart** (#26): a `/sky` offline alt/az canvas — catalog sources (station offsets
+  applied), Sun, Moon, the galactic plane, and the beam cone at a running session's pointing —
+  all from astropy (`GET /api/sky_chart`). The always-available answer to desktop Stellarium.
+- **Drift-scan campaign mode** (#27): a `Campaign` (fixed-pointing over many nights) +
+  `Capture.campaign_id` + `Capture.sidereal_day`. Captures taken while a campaign is active are
+  tagged with a sidereal-day number so passes at the same LST stack; a `/campaigns` detail
+  groups captures into passes by sidereal day with their LST. Migration 8.
+- **Scheduler + session timer** (#28): a `Schedule` (source, lead/run minutes, format, once |
+  daily). A server loop starts a capture `lead` minutes before the source's transit and runs it
+  `run` minutes, driving the daemon over the control channel (the daemon stays the only SDR
+  owner; never overlaps a running capture; refuses a run that would fill the disk past red).
+  A `/schedules` page; a client-side session timer on running observations. Migration 9.
+
 ## v0.7.1 — 2026-07-12
 
 Maintenance release, no milestone — fixes the theme regression reported after v0.7.0.
