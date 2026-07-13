@@ -149,8 +149,8 @@ UNIT_EOF
 
 print_udev() {
     cat <<'UDEV_EOF'
-# jansky-observe SDR udev rules — make the station's receivers usable without root:
-# GROUP=plugdev covers the jansky service user (the capture daemon), TAG+="uaccess"
+# jansky-observe device udev rules — make the station's receivers and the rotator
+# usable without root: GROUP=plugdev covers the jansky service user, TAG+="uaccess"
 # covers a physically seated user for bench debugging.
 # Installed by deploy/install.sh, which embeds an identical copy; CI diffs the two
 # (install.sh --print-udev) so this file and the installer can never drift.
@@ -160,6 +160,13 @@ SUBSYSTEM=="usb", ATTRS{idVendor}=="1d50", ATTRS{idProduct}=="60a1", MODE="0660"
 
 # HackRF One (RFI survey / injection test)
 SUBSYSTEM=="usb", ATTRS{idVendor}=="1d50", ATTRS{idProduct}=="6089", MODE="0660", GROUP="plugdev", TAG+="uaccess"
+
+# Discovery Drive rotator over USB-serial (roadmap M9, EasyComm II). The ESP32-S3
+# enumerates via one of a few USB-serial bridges; a stable /dev/jansky-rotator
+# symlink lets the station config name the port regardless. rotctl-TCP needs no rule.
+SUBSYSTEM=="tty", SUBSYSTEMS=="usb", ATTRS{idVendor}=="10c4", ATTRS{idProduct}=="ea60", MODE="0660", GROUP="plugdev", SYMLINK+="jansky-rotator", TAG+="uaccess"
+SUBSYSTEM=="tty", SUBSYSTEMS=="usb", ATTRS{idVendor}=="1a86", ATTRS{idProduct}=="7523", MODE="0660", GROUP="plugdev", SYMLINK+="jansky-rotator", TAG+="uaccess"
+SUBSYSTEM=="tty", SUBSYSTEMS=="usb", ATTRS{idVendor}=="303a", MODE="0660", GROUP="plugdev", SYMLINK+="jansky-rotator", TAG+="uaccess"
 UDEV_EOF
 }
 
@@ -332,7 +339,8 @@ install_udev_rules() {
     # Reload only when the udev daemon is actually running (not in a container).
     if have udevadm && [[ -d /run/udev ]]; then
         udevadm control --reload-rules
-        udevadm trigger --subsystem-match=usb || true
+        # usb for the SDRs; tty for the rotator's USB-serial bridge (M9).
+        udevadm trigger --subsystem-match=usb --subsystem-match=tty || true
     fi
 }
 
