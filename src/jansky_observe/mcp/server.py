@@ -53,6 +53,15 @@ def build_mcp(app: FastAPI) -> FastMCP:
     )
 
     @mcp.tool
+    async def get_station_identity() -> dict[str, Any]:
+        """The station's stable identity: its permanent uuid (never changes),
+        human name, dish/mount, running software version, and default location.
+        The uuid is what stamps every export and PDF report — quote it when
+        referring to this station across repos (it is jansky-research plan 78's
+        station key). Read-only."""
+        return await _get(app, "/api/station")
+
+    @mcp.tool
     async def whats_up(window_h: int = 8) -> list[dict[str, Any]]:
         """Every catalog source's current az/el (station pointing offsets applied),
         drift rate, transit time/elevation, beam-crossing minutes, and rise/set,

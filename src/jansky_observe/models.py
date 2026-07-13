@@ -13,6 +13,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from typing import Any
+from uuid import uuid4
 
 from sqlalchemy import JSON, Column
 from sqlmodel import Field, SQLModel
@@ -35,6 +36,7 @@ __all__ = [
     "RadioSource",
     "Schedule",
     "Station",
+    "new_station_uuid",
     "utcnow",
 ]
 
@@ -51,6 +53,15 @@ def utcnow() -> datetime:
     return datetime.now(UTC)
 
 
+def new_station_uuid() -> str:
+    """Return a fresh random station identifier as a UUID4 string.
+
+    Used as the default for :attr:`Station.uuid` — generated once when the
+    station row is created (seed or migration 10) and never changed.
+    """
+    return str(uuid4())
+
+
 class Station(SQLModel, table=True):
     """A telescope station — one row for now, a table so a second is trivial.
 
@@ -62,6 +73,12 @@ class Station(SQLModel, table=True):
     __tablename__ = "station"
 
     id: int | None = Field(default=None, primary_key=True)
+    #: Stable machine identity (UUID4 string), generated once at creation and
+    #: never changed — distinct from the editable, human ``name``. Stamped into
+    #: the PDF report, the observation bundle, and the MCP identity response so a
+    #: spectrum can be traced back to the station that produced it (roadmap M8,
+    #: jansky-research plan 78). Backfilled on existing stations by migration 10.
+    uuid: str = Field(default_factory=new_station_uuid, index=True)
     name: str = Field(unique=True, index=True)
     dish_diameter_m: float
     dish_f_d: float

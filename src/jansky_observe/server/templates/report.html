@@ -297,8 +297,10 @@
 </section>
 
 <p class="muted" style="font-size: 8pt;">
-  Generated {{ generated_at | dt }} by jansky-observe {{ version }}. Verdicts are deterministic
-  classifier output (ClassifierResult rows); narrative claims live in the notes (plan §12.5).
+  Generated {{ generated_at | dt }} by jansky-observe {{ version }}.
+  {% if station %}Station {{ station.name }} · <span class="mono">{{ station.uuid }}</span>.{% endif %}
+  Verdicts are deterministic classifier output (ClassifierResult rows); narrative claims live in
+  the notes (plan §12.5).
 </p>
 
 </body>

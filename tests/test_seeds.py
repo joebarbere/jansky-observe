@@ -45,6 +45,7 @@ def test_station_seeded_with_zero_pointing_offsets(engine: Engine) -> None:
     assert station.pointing_offset_az_deg == 0.0
     assert station.pointing_offset_el_deg == 0.0
     assert station.rf_chain[-1] == "Raspberry Pi 5"
+    assert station.uuid and len(station.uuid) == 36  # stable identity, generated at seed
 
 
 def test_home_location_seeded_as_default(engine: Engine) -> None:

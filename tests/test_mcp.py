@@ -93,6 +93,7 @@ def test_tool_surface_has_no_forbidden_verbs(tmp_path):
         "get_observation",
         "get_pointing",
         "get_spectrum",
+        "get_station_identity",
         "get_weather",
         "list_observations",
         "reset_hi_badge",
@@ -311,6 +312,19 @@ def test_hi_badge_tools(tmp_path):
             assert badge == {"status": "accumulating", "n_frames": 0}
             reset = _payload(await client.call_tool("reset_hi_badge", {}))
             assert reset == {"status": "accumulating", "n_frames": 0}
+
+    asyncio.run(scenario())
+
+
+def test_get_station_identity(tmp_path):
+    mcp = build_mcp(_app(tmp_path))
+
+    async def scenario():
+        async with Client(mcp) as client:
+            identity = _payload(await client.call_tool("get_station_identity", {}))
+            assert identity["name"] == "Discovery Dish"
+            assert len(identity["uuid"]) == 36  # the stable station key
+            assert identity["location"]["name"] == "Home"
 
     asyncio.run(scenario())
 

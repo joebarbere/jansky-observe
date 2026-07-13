@@ -17,12 +17,15 @@
 <section class="pane pad">
   <h2>Dish</h2>
   <table class="kv">
+    <tr><th>station&nbsp;ID</th><td class="mono">{{ station.uuid }}</td></tr>
     <tr><th>diameter</th><td>{{ station.dish_diameter_m }} m</td></tr>
     <tr><th>f/D</th><td>{{ station.dish_f_d }}</td></tr>
     <tr><th>feed</th><td>{{ station.feed }}</td></tr>
     <tr><th>mount</th><td>{{ station.mount_type }}</td></tr>
     <tr><th>compute</th><td>{{ station.compute }}</td></tr>
   </table>
+  <p class="muted">The station ID is a permanent UUID — it never changes and it stamps every
+    export, PDF report, and MCP identity response so a spectrum traces back to this station.</p>
 </section>
 
 <section class="pane pad">

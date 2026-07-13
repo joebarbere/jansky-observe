@@ -119,6 +119,18 @@ jansky-research plan 78** per plan §6 — the comparison harness is built once 
 consumed here. The full plan lives in `plans/jansky_observe.md` — read it before any
 feature work.
 
+**M8 (v0.9.0 "Research bridge & guides") is in progress** on `main` — its pieces land as
+individual PRs (`plans/roadmap-post-v0.6.md`); nothing is released yet (still `v0.8.0`).
+- **Station UUID** (schema `user_version` **10**, `_migration_10_station_uuid`):
+  `Station.uuid` — a stable UUID4 (`models.new_station_uuid`) generated once at seed and
+  backfilled onto existing stations by migration 10 (the column is indexed, so the migration
+  adds it under a `PRAGMA table_info` guard, backfills a generated UUID per row, and re-creates
+  `ix_station_uuid`). It is the station's permanent *machine* identity, distinct from the
+  editable `name`. Surfaced by `GET /api/station` + the `get_station_identity` MCP tool (**now
+  19 tools**), shown on the `/station` page, and stamped into the PDF report footer. It is
+  jansky-research plan 78's per-station key and the anchor the codified observation bundle (the
+  next M8 piece) will carry.
+
 **M6 (v0.7.0 "station cockpit") shipped** — all seven pieces below, released as `v0.7.0`
 (see `plans/roadmap-post-v0.6.md`).
 - **Diagnostics**: `GET /api/diagnostics` + the `get_diagnostics` MCP tool (now **18 tools**),
