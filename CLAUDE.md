@@ -128,8 +128,17 @@ individual PRs (`plans/roadmap-post-v0.6.md`); nothing is released yet (still `v
   `ix_station_uuid`). It is the station's permanent *machine* identity, distinct from the
   editable `name`. Surfaced by `GET /api/station` + the `get_station_identity` MCP tool (**now
   19 tools**), shown on the `/station` page, and stamped into the PDF report footer. It is
-  jansky-research plan 78's per-station key and the anchor the codified observation bundle (the
-  next M8 piece) will carry.
+  jansky-research plan 78's per-station key and the anchor the codified observation bundle carries.
+- **Codified observation bundle** (`export/bundle.py`, `BUNDLE_SCHEMA =
+  "jansky-observe.observation-bundle/1"`): the documented JSON+npz export plan 78 consumes.
+  `build_observation_manifest` produces the machine-readable block (station UUID, pointing, LST
+  at each capture's start, timestamps, SDR settings/gain, cal-epoch ref, classifier verdicts);
+  `write_observation_bundle` zips it as `bundle.json` + one self-describing averaged-spectrum
+  `capture-<id>.npz` per on-disk npz capture. Served at `GET /api/observations/{id}/bundle.json`
+  (manifest) and `/bundle` (zip), via the `get_observation_bundle` MCP tool (**now 20 tools**),
+  linked from the observation detail page, and **embedded verbatim in the PDF report** so a
+  report alone is machine-recoverable. The one-way Virgo/ezRA exporters are deliberately left as
+  strict third-party formats — the UUID/provenance rides this bundle, not those.
 
 **M6 (v0.7.0 "station cockpit") shipped** — all seven pieces below, released as `v0.7.0`
 (see `plans/roadmap-post-v0.6.md`).

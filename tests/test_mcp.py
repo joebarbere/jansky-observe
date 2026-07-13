@@ -91,6 +91,7 @@ def test_tool_surface_has_no_forbidden_verbs(tmp_path):
         "get_hi_badge",
         "get_live_status",
         "get_observation",
+        "get_observation_bundle",
         "get_pointing",
         "get_spectrum",
         "get_station_identity",
@@ -312,6 +313,32 @@ def test_hi_badge_tools(tmp_path):
             assert badge == {"status": "accumulating", "n_frames": 0}
             reset = _payload(await client.call_tool("reset_hi_badge", {}))
             assert reset == {"status": "accumulating", "n_frames": 0}
+
+    asyncio.run(scenario())
+
+
+def test_get_observation_bundle(tmp_path):
+    mcp = build_mcp(_app(tmp_path))
+
+    async def scenario():
+        async with Client(mcp) as client:
+            draft = _payload(
+                await client.call_tool(
+                    "create_observation_draft",
+                    {
+                        "observation_type": "HI pointed — Cygnus region",
+                        "source": "Cygnus region HI",
+                        "name": "bundle draft",
+                    },
+                )
+            )
+            bundle = _payload(
+                await client.call_tool("get_observation_bundle", {"observation_id": draft["id"]})
+            )
+            assert bundle["schema"] == "jansky-observe.observation-bundle/1"
+            assert len(bundle["station"]["uuid"]) == 36  # plan 78's per-station key
+            assert bundle["observation"]["id"] == draft["id"]
+            assert bundle["captures"] == []  # a fresh draft has no captures yet
 
     asyncio.run(scenario())
 

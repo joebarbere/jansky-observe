@@ -30,6 +30,7 @@ from sqlmodel import Session, col, select
 from jansky_observe import __version__
 from jansky_observe.astro.pointing import target_coord
 from jansky_observe.capture.hackrf_sweep import rfi_sweep_comparison
+from jansky_observe.export.bundle import build_observation_manifest
 from jansky_observe.export.figures import profile_figure, waterfall_figure
 from jansky_observe.models import (
     CalibrationEpoch,
@@ -215,6 +216,10 @@ def _gather_context(session: Session, observation: Observation, data_dir: Path) 
         ),
         "generated_at": utcnow(),
         "version": __version__,
+        # The codified observation bundle manifest embedded verbatim (roadmap M8,
+        # plan 78) so a report alone is machine-recoverable — same data block the
+        # bundle export and MCP tool serve.
+        "bundle_json": json.dumps(build_observation_manifest(session, observation), indent=2),
     }
 
 

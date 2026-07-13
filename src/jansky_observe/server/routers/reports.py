@@ -21,6 +21,7 @@ from typing import Any, Literal
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 
+from jansky_observe.export.bundle import build_observation_manifest, write_observation_bundle
 from jansky_observe.export.ezra_txt import export_ezra_txt
 from jansky_observe.export.pdf import build_report, report_path
 from jansky_observe.export.virgo_csv import export_virgo_csv
@@ -80,6 +81,30 @@ def observation_report_pdf(request: Request, session: SessionDep, obs_id: int) -
 def api_observation_report(request: Request, session: SessionDep, obs_id: int) -> dict[str, Any]:
     """Build (or rebuild) the PDF report; returns the written path."""
     return {"path": str(_build(request, session, obs_id))}
+
+
+@router.get("/api/observations/{obs_id}/bundle.json")
+def api_observation_bundle_manifest(session: SessionDep, obs_id: int) -> dict[str, Any]:
+    """The observation bundle manifest (roadmap M8, plan 78 input format): station
+    UUID, pointing, LST, timestamps, gain, cal-epoch, and classifier verdicts for
+    every capture. The machine-readable half of the bundle — the ``get_observation
+    _bundle`` MCP tool proxies this; the ``.npz`` spectra ride the zip download."""
+    observation = get_or_404(session, Observation, obs_id)
+    return build_observation_manifest(session, observation)
+
+
+@router.get("/api/observations/{obs_id}/bundle")
+def api_observation_bundle(request: Request, session: SessionDep, obs_id: int) -> FileResponse:
+    """The full observation bundle as a zip download (roadmap M8, plan 78): a
+    ``bundle.json`` manifest plus one self-describing averaged-spectrum
+    ``capture-<id>.npz`` per on-disk npz capture. Built under
+    ``<data_dir>/exports/`` and overwritten on re-export."""
+    observation = get_or_404(session, Observation, obs_id)
+    exports_dir = Path(request.app.state.settings.data_dir) / "exports"
+    zip_path = write_observation_bundle(session, observation, exports_dir)
+    return FileResponse(
+        zip_path, media_type="application/zip", filename=zip_path.name
+    )
 
 
 def _ezra_context(session: SessionDep, capture: Capture) -> dict[str, Any]:
