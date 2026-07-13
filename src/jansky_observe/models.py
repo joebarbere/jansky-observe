@@ -21,6 +21,7 @@ from sqlmodel import Field, SQLModel
 __all__ = [
     "CALIBRATION_KINDS",
     "CAPTURE_KINDS",
+    "ROTATOR_KINDS",
     "CalibrationEpoch",
     "Campaign",
     "Capture",
@@ -51,6 +52,12 @@ def utcnow() -> datetime:
         values read back from the database are naive-UTC by convention.
     """
     return datetime.now(UTC)
+
+
+#: Allowed :attr:`Station.rotator_kind` values (roadmap M9). ``none`` = manual;
+#: ``sim`` = in-process simulator; ``rotctl`` = rotctld NET protocol over TCP;
+#: ``easycomm`` = EasyComm II over USB-serial.
+ROTATOR_KINDS: tuple[str, ...] = ("none", "sim", "rotctl", "easycomm")
 
 
 def new_station_uuid() -> str:
@@ -96,6 +103,24 @@ class Station(SQLModel, table=True):
     #: Base URL of a desktop Stellarium's RemoteControl API (plan §4.3),
     #: e.g. ``"http://desktop:8090"``; ``None`` disables the integration.
     stellarium_url: str | None = None
+    #: Az/el rotator config (roadmap M9 — the KrakenRF Discovery Drive). ``kind``
+    #: is one of :data:`ROTATOR_KINDS`: ``"none"`` (manual, the default),
+    #: ``"sim"`` (in-process simulator), ``"rotctl"`` (rotctld NET protocol at
+    #: ``rotator_host``:``rotator_port``), or ``"easycomm"`` (EasyComm II over the
+    #: serial device ``rotator_serial`` at ``rotator_baud``). The az/el min/max are
+    #: hard slew limits enforced before every move; ``park_az_deg``/``park_el_deg``
+    #: is the stow pointing (default straight up, el 90°).
+    rotator_kind: str = "none"
+    rotator_host: str = ""
+    rotator_port: int = 4533
+    rotator_serial: str = ""
+    rotator_baud: int = 19200
+    az_min_deg: float = 0.0
+    az_max_deg: float = 360.0
+    el_min_deg: float = 0.0
+    el_max_deg: float = 90.0
+    park_az_deg: float = 0.0
+    park_el_deg: float = 90.0
     created_at: datetime = Field(default_factory=utcnow)
     updated_at: datetime = Field(default_factory=utcnow)
 
