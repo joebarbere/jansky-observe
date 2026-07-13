@@ -14,16 +14,20 @@ from __future__ import annotations
 
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Form, HTTPException
+from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from sqlmodel import col, select
 
-from jansky_observe.astro.rotator import RotatorError
 from jansky_observe.models import Observation, RadioSource, Station, utcnow
 from jansky_observe.server.rotator import (
+    RotatorError,
+    RotatorUnconfigured,
+    SlewOutOfLimits,
     park_position,
     rotator_from_station,
+    slew,
     station_allows,
+    stop,
 )
 from jansky_observe.server.routers import (
     SessionDep,
@@ -32,6 +36,7 @@ from jansky_observe.server.routers import (
     get_or_404,
     source_pointing,
 )
+from jansky_observe.server.tracking import TrackingState, disable_tracking, enable_tracking
 
 __all__ = ["router"]
 
@@ -68,44 +73,28 @@ def _log_slew(session: SessionDep, text: str) -> None:
     session.commit()
 
 
-def _require_rotator(station: Station) -> Any:
-    """Build the configured rotator or 409 when the station has none."""
+def _do_slew(station: Station, az_deg: float, el_deg: float) -> None:
+    """Slew via the shared primitive, mapping its errors to HTTP status codes:
+    422 outside the limits, 409 unconfigured, 502 on a transport failure."""
     try:
-        rotator = rotator_from_station(station)
+        slew(station, az_deg, el_deg)
+    except SlewOutOfLimits as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except RotatorUnconfigured as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except RotatorError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
-    if rotator is None:
-        raise HTTPException(status_code=409, detail="no rotator configured on this station")
-    return rotator
-
-
-def _checked_slew(session: SessionDep, station: Station, az_deg: float, el_deg: float) -> None:
-    """Limit-check then command a slew; 422 outside the envelope, 502 on transport."""
-    if not station_allows(station, az_deg, el_deg):
-        raise HTTPException(
-            status_code=422,
-            detail=(
-                f"az/el {az_deg:.1f}°/{el_deg:.1f}° is outside the station slew limits "
-                f"(az {station.az_min_deg:.0f}–{station.az_max_deg:.0f}°, "
-                f"el {station.el_min_deg:.0f}–{station.el_max_deg:.0f}°)"
-            ),
-        )
-    rotator = _require_rotator(station)
-    try:
-        rotator.set_position(az_deg, el_deg)
-    except RotatorError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
-    finally:
-        rotator.close()
 
 
 @router.get("/api/rotator")
-def api_rotator_status(session: SessionDep) -> dict[str, Any]:
+def api_rotator_status(request: Request, session: SessionDep) -> dict[str, Any]:
     """Best-effort rotator status: kind, configured?, live az/el readback, limits,
-    park. ``reachable`` is ``False`` (with ``error``) when the Drive can't be
-    talked to; never raises for an unreachable rotator. Read-only."""
+    park, and the tracking state. ``reachable`` is ``False`` (with ``error``) when
+    the Drive can't be talked to; never raises for an unreachable rotator.
+    Read-only."""
     station = default_station(session)
     park = park_position(station)
+    tracking: TrackingState | None = getattr(request.app.state, "tracking", None)
     status: dict[str, Any] = {
         "kind": station.rotator_kind,
         "configured": station.rotator_kind != "none",
@@ -119,6 +108,11 @@ def api_rotator_status(session: SessionDep) -> dict[str, Any]:
             "el_max": station.el_max_deg,
         },
         "park": {"az_deg": park.az_deg, "el_deg": park.el_deg},
+        "tracking": {
+            "enabled": bool(tracking and tracking.enabled),
+            "observation_id": tracking.observation_id if tracking else None,
+            "note": tracking.note if tracking else "",
+        },
     }
     try:
         rotator = rotator_from_station(station)
@@ -146,7 +140,7 @@ def rotator_slew(
 ) -> RedirectResponse:
     """Manual az/el slew (HTML). Limit-checked; logged to the running observation."""
     station = default_station(session)
-    _checked_slew(session, station, az_deg, el_deg)
+    _do_slew(station, az_deg, el_deg)
     _log_slew(session, f"Rotator slew to az {az_deg:.1f}° / el {el_deg:.1f}° (manual).")
     return _see_other("/station")
 
@@ -155,13 +149,12 @@ def rotator_slew(
 def rotator_stop(session: SessionDep) -> RedirectResponse:
     """Halt rotator motion immediately (HTML)."""
     station = default_station(session)
-    rotator = _require_rotator(station)
     try:
-        rotator.stop()
+        stop(station)
+    except RotatorUnconfigured as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except RotatorError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
-    finally:
-        rotator.close()
     _log_slew(session, "Rotator STOP (manual).")
     return _see_other("/station")
 
@@ -171,8 +164,31 @@ def rotator_park(session: SessionDep) -> RedirectResponse:
     """Slew to the station's park/stow position (HTML)."""
     station = default_station(session)
     park = park_position(station)
-    _checked_slew(session, station, park.az_deg, park.el_deg)
+    _do_slew(station, park.az_deg, park.el_deg)
     _log_slew(session, f"Rotator PARK to az {park.az_deg:.1f}° / el {park.el_deg:.1f}° (manual).")
+    return _see_other("/station")
+
+
+@router.post("/rotator/tracking/start")
+def rotator_tracking_start(request: Request, session: SessionDep) -> RedirectResponse:
+    """Enable drift tracking for the running observation (HTML). 409 when there is
+    no running observation or no rotator configured."""
+    station = default_station(session)
+    if station.rotator_kind == "none":
+        raise HTTPException(status_code=409, detail="no rotator configured on this station")
+    observation = _running_observation(session)
+    if observation is None or observation.id is None:
+        raise HTTPException(status_code=409, detail="no running observation to track")
+    enable_tracking(request.app, observation.id, observation.source_id)
+    _log_slew(session, "Rotator tracking ENABLED (re-points as the source drifts).")
+    return _see_other("/station")
+
+
+@router.post("/rotator/tracking/stop")
+def rotator_tracking_stop(request: Request, session: SessionDep) -> RedirectResponse:
+    """Disable drift tracking (HTML)."""
+    disable_tracking(request.app)
+    _log_slew(session, "Rotator tracking disabled.")
     return _see_other("/station")
 
 
@@ -192,13 +208,7 @@ def slew_to_target(session: SessionDep, obs_id: int) -> RedirectResponse:
                 f"{source.name} is at az/el {az_deg:.1f}°/{el_deg:.1f}° — outside the slew limits"
             ),
         )
-    rotator = _require_rotator(station)
-    try:
-        rotator.set_position(az_deg, el_deg)
-    except RotatorError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
-    finally:
-        rotator.close()
+    _do_slew(station, az_deg, el_deg)
     stamp = utcnow().strftime("%Y-%m-%d %H:%M UTC")
     observation.notes = (
         f"{observation.notes.rstrip()}\n\n"

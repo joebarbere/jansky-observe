@@ -143,9 +143,21 @@ tagged v1.0.0 yet), shifting the table.
   (`station_allows`, 422 outside; 409 when unconfigured) and **logged to the running observation's
   timeline**. Config saved via `POST /station/rotator` (catalog.py); a rotator panel on `/station`
   (readback poller + manual slew/stop/park) and a "Slew rotator to target" button on the
-  observation detail page. No MCP verbs yet.
-  Remaining M9 pieces: (3) tracking mode + scheduler auto-slew, (4) `get_rotator_status` + the
-  guarded `slew_rotator` MCP verb + the USB-serial udev rule.
+  observation detail page. No MCP verbs yet. `server/rotator.py` gained the shared `slew`/`stop`
+  primitives + `SlewOutOfLimits`/`RotatorUnconfigured` (the single place the az/el envelope is
+  enforced; routes, tracking, and the piece-4 MCP verb all go through it).
+- **Tracking mode + scheduler auto-slew** (piece 3, `server/tracking.py`): a lifespan
+  `tracking_loop` (ticks every `TRACK_TICK_S=30s`) re-points the rotator whenever the source
+  drifts past `REPOINT_FRACTION=0.2 × HPBW` from the last commanded az/el — a pure `needs_repoint`
+  decision + async `tracking_tick` (IO: pointing, slew, timeline log). `TrackingState` on
+  `app.state.tracking`; enabled by `POST /rotator/tracking/start` (needs a running observation +
+  configured rotator) and auto-stops when the observation stops. Out-of-limits holds (logs once);
+  a transport error disables. The scheduler auto-slews to a schedule's source at window open
+  (`_auto_slew_to_source`, best-effort — never fails the capture). Note: the `sim` rotator is
+  created per call (stateless readback across HTTP calls); real transports hold state in hardware,
+  and tracking decisions use app-level last-commanded state, not rotator readback, so this is fine.
+  Remaining M9 piece: (4) `get_rotator_status` + the guarded `slew_rotator` MCP verb + the
+  USB-serial udev rule (→ install.sh change → QEMU gate at the v0.10.0 release).
 
 **M8 (v0.9.0 "Research bridge & guides") shipped** — released as `v0.9.1` (see
 `plans/roadmap-post-v0.6.md` and `CHANGES.md`). Its pieces:
