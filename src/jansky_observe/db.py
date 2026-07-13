@@ -236,6 +236,35 @@ def _migration_10_station_uuid(conn: Connection) -> None:
     conn.exec_driver_sql("CREATE INDEX IF NOT EXISTS ix_station_uuid ON station (uuid)")
 
 
+def _migration_11_station_rotator(conn: Connection) -> None:
+    """Add the az/el rotator config columns to ``station`` (roadmap M9 — the
+    KrakenRF Discovery Drive): ``rotator_kind`` + transport (host/port/serial/baud)
+    + the az/el slew limits + park position.
+
+    Each column is guarded on ``PRAGMA table_info`` (migration 1 builds the latest
+    schema, so a fresh database already has them). All are ``NOT NULL`` with a
+    default matching the model, so existing station rows land on ``none`` (manual)
+    with sane limits (az 0–360, el 0–90, park straight up).
+    """
+    columns = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(station)")}
+    additions = (
+        ("rotator_kind", "VARCHAR NOT NULL DEFAULT 'none'"),
+        ("rotator_host", "VARCHAR NOT NULL DEFAULT ''"),
+        ("rotator_port", "INTEGER NOT NULL DEFAULT 4533"),
+        ("rotator_serial", "VARCHAR NOT NULL DEFAULT ''"),
+        ("rotator_baud", "INTEGER NOT NULL DEFAULT 19200"),
+        ("az_min_deg", "FLOAT NOT NULL DEFAULT 0.0"),
+        ("az_max_deg", "FLOAT NOT NULL DEFAULT 360.0"),
+        ("el_min_deg", "FLOAT NOT NULL DEFAULT 0.0"),
+        ("el_max_deg", "FLOAT NOT NULL DEFAULT 90.0"),
+        ("park_az_deg", "FLOAT NOT NULL DEFAULT 0.0"),
+        ("park_el_deg", "FLOAT NOT NULL DEFAULT 90.0"),
+    )
+    for name, ddl in additions:
+        if name not in columns:
+            conn.exec_driver_sql(f"ALTER TABLE station ADD COLUMN {name} {ddl}")
+
+
 MIGRATIONS: list[tuple[int, Callable[[Connection], None]]] = [
     (1, _migration_1_initial_schema),
     (2, _migration_2_station_stellarium_url),
@@ -247,6 +276,7 @@ MIGRATIONS: list[tuple[int, Callable[[Connection], None]]] = [
     (8, _migration_8_driftscan),
     (9, _migration_9_schedule),
     (10, _migration_10_station_uuid),
+    (11, _migration_11_station_rotator),
 ]
 
 

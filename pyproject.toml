@@ -24,6 +24,7 @@ dependencies = [
     "matplotlib>=3.8",
     "pillow>=10.0",
     "weasyprint>=62",
+    "pyserial>=3.5",
 ]
 
 [project.urls]

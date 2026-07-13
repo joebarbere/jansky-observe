@@ -122,6 +122,24 @@ The HI4PI cross-check (`hi4pi_xcheck`, v2) remains **deferred to jansky-research
 plan §6 — the comparison harness is built once there and consumed here. The full plan lives in
 `plans/jansky_observe.md` — read it before any feature work.
 
+**M9 (v0.10.0 "Rotator — Discovery Drive") is in progress** on `main` — synthetic-first
+(built against a simulated rotator; the Drive is still on the wishlist). Decisions (2026-07-13):
+**both transports** (rotctl-TCP + EasyComm II, adds `pyserial`) and a **guarded `slew_rotator`
+MCP verb** — the first mutating MCP verb that moves hardware, gated on the station az/el limits +
+timeline logging (the bias-tee invariant is untouched). It ships as **v0.10.0** (no campaign has
+tagged v1.0.0 yet), shifting the table.
+- **Rotator client + config + simulator** (piece 1, schema `user_version` **11**,
+  `_migration_11_station_rotator`): `astro/rotator.py` — the `Rotator` transport protocol
+  (`get_position`/`set_position`/`stop`/`close`) with `RotctlTcpRotator` (stdlib socket, rotctld
+  `P`/`p`/`S`), `EasyCommSerialRotator` (EasyComm II over an injectable serial transport; pyserial
+  at runtime), and `SimRotator` (finite slew rate under an injectable clock). `within_limits` +
+  `make_rotator` are model-free; `server/rotator.py` is the Station glue (`rotator_from_station`,
+  `station_allows` limit check, `park_position`). Station gains `rotator_kind`
+  (none·sim·rotctl·easycomm) + host/port/serial/baud + az/el limits + park az/el (migration 11).
+  Remaining M9 pieces: (2) slew/readback/stop/park UI (HTML, limit-checked, logged), (3) tracking
+  mode + scheduler auto-slew, (4) `get_rotator_status` + the guarded `slew_rotator` MCP verb +
+  the USB-serial udev rule.
+
 **M8 (v0.9.0 "Research bridge & guides") shipped** — released as `v0.9.1` (see
 `plans/roadmap-post-v0.6.md` and `CHANGES.md`). Its pieces:
 - **Station UUID** (schema `user_version` **10**, `_migration_10_station_uuid`):

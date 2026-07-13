@@ -172,18 +172,25 @@ ESP32-S3). Its two control surfaces, per KrakenRF's docs:
 - **EasyComm II over USB-serial** (hamlib model 202, 19200 baud) as the wired fallback.
 
 Both are simple text protocols, so the plan is a small native client (no hamlib binary
-dependency on the Pi):
+dependency on the Pi). **Decisions (2026-07-13):** build **both transports** in M9 (adds a
+`pyserial` dep + a udev rule for the USB-serial device), and **expose a guarded `slew_rotator`
+MCP tool** alongside read-only status — a deliberate departure from the prior "no moving
+hardware from an LLM" default, gated behind hard az/el-limit checks + timeline logging (the
+absolute bias-tee invariant is untouched). Since no campaign has tagged v1.0.0 yet, M9 ships as
+**v0.10.0**.
 
-- `astro/rotator.py`: rotctl-TCP client (position set/get, stop, park) + EasyComm II
-  serial variant; Drive host/port on the Station record.
+- `astro/rotator.py`: rotctl-TCP client (position set/get, stop) + EasyComm II serial variant +
+  an in-process `SimRotator` (M9 is synthetic-first until the Drive is on the roof); Drive
+  host/port/serial + az/el limits + park position on the Station record (migration 11).
 - Wizard/detail integration: **slew to target**, readback vs astropy-expected az/el
   (pointing offsets applied), drift **tracking mode** (periodic re-point at
   beam-crossing-aware cadence).
 - Safety rails: configurable az/el limits, a stow/park action, never slew without an
   explicit operator action or an enabled schedule, and slews always logged to the
   observation timeline.
-- MCP: `get_rotator_status` read-only; whether *slew* is MCP-exposed is decided then
-  (moving hardware from an LLM tool is a real safety question — default no).
+- MCP: `get_rotator_status` read-only **plus a guarded `slew_rotator` verb** (decided
+  2026-07-13, above) — the first mutating MCP verb that moves hardware, so it enforces the
+  station az/el limits, refuses outside them, and logs every slew to the observation timeline.
 
 Version note: numbered v1.1.0 assuming the campaign has tagged v1.0.0 by then; if M9
 lands first it ships as v0.10.0 and the table shifts.

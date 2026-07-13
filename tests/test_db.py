@@ -369,6 +369,65 @@ def test_migration_10_upgrade_from_version_9_backfills_uuid(tmp_path: Path) -> N
         assert s.exec(select(Station)).one().uuid == first_uuid
 
 
+def test_migration_11_fresh_db_has_rotator_columns(tmp_path: Path) -> None:
+    engine = db.init_db(tmp_path / "data")
+    assert _user_version(engine) == max(version for version, _ in db.MIGRATIONS)
+    cols = {c["name"] for c in inspect(engine).get_columns("station")}
+    assert {
+        "rotator_kind",
+        "rotator_host",
+        "rotator_port",
+        "rotator_serial",
+        "rotator_baud",
+        "az_min_deg",
+        "az_max_deg",
+        "el_min_deg",
+        "el_max_deg",
+        "park_az_deg",
+        "park_el_deg",
+    } <= cols
+
+
+def test_migration_11_upgrade_from_version_10_keeps_data(tmp_path: Path) -> None:
+    from jansky_observe.models import Station
+
+    # Simulate a pre-M9 station: run migrations 1..10, drop the rotator columns
+    # (none are indexed or FK-bound, so a plain DROP works), then migrate forward.
+    engine = db.get_engine(tmp_path / "data")
+    rotator_cols = [
+        "rotator_kind",
+        "rotator_host",
+        "rotator_port",
+        "rotator_serial",
+        "rotator_baud",
+        "az_min_deg",
+        "az_max_deg",
+        "el_min_deg",
+        "el_max_deg",
+        "park_az_deg",
+        "park_el_deg",
+    ]
+    with engine.begin() as conn:
+        for version, apply in db.MIGRATIONS[:10]:  # migrations 1..10
+            apply(conn)
+            conn.exec_driver_sql(f"PRAGMA user_version = {version}")
+        for name in rotator_cols:
+            conn.exec_driver_sql(f"ALTER TABLE station DROP COLUMN {name}")
+    assert _user_version(engine) == 10
+    assert "rotator_kind" not in {c["name"] for c in inspect(engine).get_columns("station")}
+
+    db.migrate(engine)
+    assert _user_version(engine) == max(version for version, _ in db.MIGRATIONS)
+    with db.session(engine) as s:
+        station = s.exec(select(Station)).one()
+        assert station.rotator_kind == "none"  # existing station defaults to manual
+        assert station.az_max_deg == 360.0 and station.el_max_deg == 90.0
+        assert station.park_el_deg == 90.0
+
+    db.migrate(engine)  # re-run is a no-op
+    assert _user_version(engine) == max(version for version, _ in db.MIGRATIONS)
+
+
 def test_migration_5_seeds_the_type_into_a_version_4_db(tmp_path: Path) -> None:
     from jansky_observe.models import ChecklistTemplateItem, ObservationType
 
