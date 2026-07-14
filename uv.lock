@@ -981,7 +981,7 @@ dev = [
 
 [[package]]
 name = "jansky-observe"
-version = "0.10.0"
+version = "0.10.1"
 source = { editable = "." }
 dependencies = [
     { name = "astropy" },

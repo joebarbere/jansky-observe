@@ -9,7 +9,7 @@
 #
 #   sudo bash install.sh [--version vX.Y.Z] [--wheel path.whl] [--jansky-ref vX.Y.Z]
 #                        [--no-start] [--smoke] [--uninstall] [--reset-data [--yes]]
-#                        [--allow-unsupported-os]
+#                        [--install-argon [--argon-nvme-boot]] [--allow-unsupported-os]
 #
 # Supported base: Raspberry Pi OS Lite 64-bit, Debian 13 "Trixie", aarch64 — the ONE manual
 # prerequisite (plan §9). The exact supported image is pinned in deploy/OS_IMAGE. Anything else
@@ -46,6 +46,14 @@ UDEV_RULES_FILE="/etc/udev/rules.d/99-jansky-observe-sdr.rules"
 DEFAULT_FILE="/etc/default/jansky-observe"
 HEALTH_URL="http://127.0.0.1:8000/healthz"
 HEALTH_TIMEOUT=90             # seconds to wait for /healthz
+
+# Argon ONE V5 M.2 NVMe case (optional, --install-argon). The Pi 5 lives in this case; the
+# NVMe on its M.2 slot is just the Pi 5 PCIe bus, which we enable in config.txt. The fan +
+# power-button "drivers" are Argon40's own daemon (it speaks to the case's MCU), so that half
+# is their official installer. NVMe *boot* — as opposed to seeing the NVMe as a data disk —
+# is the extra boot-critical EEPROM step, gated behind --argon-nvme-boot.
+ARGON_INSTALLER_URL="https://download.argon40.com/argon1v5.sh"
+BOOT_CONFIG_CANDIDATES=(/boot/firmware/config.txt /boot/config.txt)  # Trixie firmware path first
 
 # libpango*/fonts: WeasyPrint's system dependencies (PDF reports, M4).
 # sqlite3: the CLI for hand-inspecting /var/lib/jansky-observe/*.sqlite3 when
@@ -200,6 +208,11 @@ Usage: sudo bash install.sh [flags]
   --set-source synthetic|airspy
                           Switch the capture source (writes /etc/default/jansky-observe,
                           restarts the capture service) and exit — no reinstall
+  --install-argon         Set up the Argon ONE V5 M.2 NVMe case and exit: enable the Pi 5
+                          PCIe/M.2 slot in config.txt + install Argon's fan/power-button
+                          daemon. Idempotent; reboot afterwards. Pi 5 only.
+  --argon-nvme-boot       With --install-argon, also update the bootloader EEPROM to an
+                          NVMe-first boot order (boot-critical; needs --yes on a non-TTY)
   --allow-unsupported-os  Skip the OS/architecture check (at your own risk)
   --print-unit server|capture   Print an embedded systemd unit (drift check; no root)
   --print-udev            Print the embedded udev rules (drift check; no root)
@@ -515,6 +528,129 @@ set_source() {
     fi
 }
 
+# --- Argon ONE V5 M.2 NVMe case (--install-argon) --------------------------
+# Optional convenience for the physical build. Entirely independent of the SDR/capture
+# path — it touches config.txt, the bootloader EEPROM and Argon's own daemon, and never
+# goes near the bias-tee-guarded code. Everything here is idempotent.
+
+boot_config_path() {
+    # Echo the active config.txt (firmware partition on Trixie, /boot on older layouts).
+    local p
+    for p in "${BOOT_CONFIG_CANDIDATES[@]}"; do
+        [[ -f "${p}" ]] && { printf '%s' "${p}"; return 0; }
+    done
+    return 1
+}
+
+ensure_config_line() {
+    # Idempotently ensure a config.txt line: leave it if already exact, normalize a
+    # different/commented form of the same setting, else append.
+    #   ensure_config_line <file> <match-regex-for-whole-line> <desired-line>
+    local file="$1" match="$2" line="$3"
+    if grep -qxF "${line}" "${file}"; then
+        log "  ${file}: '${line}' already set"
+        return 0
+    fi
+    if grep -qE "${match}" "${file}"; then
+        sed -i -E "s|${match}|${line}|" "${file}"
+        log "  ${file}: normalized to '${line}'"
+    else
+        printf '%s\n' "${line}" >> "${file}"
+        log "  ${file}: appended '${line}'"
+    fi
+}
+
+install_argon_daemon() {
+    # Argon40's own installer for the case fan + power button. It speaks the case MCU's
+    # protocol, so only Argon ships it; we fetch-then-run (rather than piping straight to
+    # bash) so the download failure is caught and the script is on disk if it errors.
+    have curl || die "curl is required to fetch the Argon installer"
+    log "installing the Argon ONE V5 fan + power-button daemon"
+    log "  source: ${ARGON_INSTALLER_URL} (Argon40 official; adds 'argonone-config' + argononed.service)"
+    local tmp
+    tmp="$(mktemp)"
+    curl -fsSL -o "${tmp}" "${ARGON_INSTALLER_URL}" \
+        || die "could not download the Argon installer (${ARGON_INSTALLER_URL}) — check networking"
+    bash "${tmp}" || die "the Argon installer failed — see its output above"
+    rm -f "${tmp}"
+    log "Argon daemon installed — tune the fan curve any time with: argonone-config"
+}
+
+configure_argon_nvme_boot() {
+    # NVMe *boot* (vs. just seeing the NVMe as a data disk): bring the bootloader up to date
+    # and set an NVMe-first boot order. Boot-critical, so opt-in (--argon-nvme-boot) and
+    # confirmed on a TTY (or --yes).
+    have rpi-eeprom-config \
+        || die "rpi-eeprom-config not found — 'apt-get install rpi-eeprom' first, or drop --argon-nvme-boot"
+    if [[ "${ASSUME_YES}" -ne 1 ]]; then
+        if [[ -t 0 ]]; then
+            local reply
+            printf 'This rewrites the Pi bootloader EEPROM (boot order -> NVMe-first).\n' >&2
+            read -r -p "Type 'nvme' to confirm: " reply
+            [[ "${reply}" == "nvme" ]] || die "not confirmed — EEPROM left unchanged"
+        else
+            die "--argon-nvme-boot rewrites the bootloader EEPROM and stdin is not a TTY — re-run with --yes"
+        fi
+    fi
+    if have rpi-eeprom-update; then
+        log "updating the Raspberry Pi bootloader to the latest (rpi-eeprom-update -a)"
+        rpi-eeprom-update -a || warn "rpi-eeprom-update returned non-zero (may already be current)"
+    fi
+    local cfg
+    cfg="$(mktemp)"
+    rpi-eeprom-config > "${cfg}"
+    # BOOT_ORDER nibbles read right-to-left: 6=NVMe, 4=USB-MSD, 1=SD, f=restart the sequence.
+    # 0xf416 => NVMe first, then USB, then SD, then loop. PCIE_PROBE=1 helps third-party
+    # M.2 boards (like Argon's) enumerate before the boot attempt.
+    local k
+    for k in "BOOT_ORDER=0xf416" "PCIE_PROBE=1"; do
+        if grep -qE "^${k%%=*}=" "${cfg}"; then
+            sed -i -E "s|^${k%%=*}=.*|${k}|" "${cfg}"
+        else
+            printf '%s\n' "${k}" >> "${cfg}"
+        fi
+    done
+    log "applying EEPROM config (BOOT_ORDER=0xf416, PCIE_PROBE=1)"
+    rpi-eeprom-config --apply "${cfg}" || die "rpi-eeprom-config --apply failed"
+    rm -f "${cfg}"
+    log "bootloader set to try the NVMe first — the new order takes effect on next reboot"
+}
+
+install_argon_case() {
+    # Two independent, idempotent halves: (1) enable the Pi 5 PCIe/M.2 slot so the NVMe is
+    # detected; (2) install Argon's fan + button daemon. --argon-nvme-boot adds the separate
+    # boot-order step. Reboot afterwards for the PCIe change to take effect.
+    local model=""
+    [[ -r /proc/device-tree/model ]] && model="$(tr -d '\0' < /proc/device-tree/model)"
+    if [[ "${ALLOW_UNSUPPORTED}" -ne 1 && "${model}" != *"Raspberry Pi 5"* ]]; then
+        die "hardware looks like '${model:-unknown}', not a Raspberry Pi 5 — the Argon ONE V5 case is Pi 5 only (--allow-unsupported-os to override)"
+    fi
+
+    # (1) PCIe / M.2 enablement in config.txt. On the Pi 5 the external PCIe lane is off by
+    # default; dtparam=pciex1 turns it on and pciex1_gen=3 runs the Argon M.2 board at Gen3.
+    local cfg
+    if cfg="$(boot_config_path)"; then
+        log "enabling the PCIe M.2 slot in ${cfg}"
+        ensure_config_line "${cfg}" '^[#[:space:]]*dtparam=pciex1$' 'dtparam=pciex1'
+        ensure_config_line "${cfg}" '^[#[:space:]]*dtparam=pciex1_gen=.*' 'dtparam=pciex1_gen=3'
+    else
+        warn "no config.txt found (${BOOT_CONFIG_CANDIDATES[*]}) — enable 'dtparam=pciex1' + 'dtparam=pciex1_gen=3' by hand"
+    fi
+
+    # (2) Argon fan + power-button daemon.
+    install_argon_daemon
+
+    # (3) Optional: make the Pi boot from the NVMe.
+    if [[ "${ARGON_NVME_BOOT}" -eq 1 ]]; then
+        configure_argon_nvme_boot
+    else
+        log "skipping NVMe boot-order change (pass --argon-nvme-boot to boot from the NVMe)"
+    fi
+
+    log "Argon ONE V5 setup done. REBOOT to bring up the PCIe/M.2 slot: sudo reboot"
+    log "after reboot, confirm the NVMe with: lsblk -d -o NAME,SIZE,MODEL | grep -i nvme"
+}
+
 do_reset_data() {
     # QA / clean-install reset (README "Resetting station data"): delete ALL station
     # data — DB, captures, photos, reports — and let migrations + seeds rebuild a
@@ -571,7 +707,7 @@ do_uninstall() {
 main() {
     local VERSION="" WHEEL_PATH="" JANSKY_REF="${DEFAULT_JANSKY_REF}"
     local START=1 SMOKE=0 UNINSTALL=0 ALLOW_UNSUPPORTED=0 SET_SOURCE=""
-    local RESET_DATA=0 ASSUME_YES=0
+    local RESET_DATA=0 ASSUME_YES=0 INSTALL_ARGON=0 ARGON_NVME_BOOT=0
     local UV=""
 
     while [[ $# -gt 0 ]]; do
@@ -585,6 +721,8 @@ main() {
             --reset-data) RESET_DATA=1; shift ;;
             --yes) ASSUME_YES=1; shift ;;
             --set-source) SET_SOURCE="${2:?--set-source needs 'synthetic' or 'airspy'}"; shift 2 ;;
+            --install-argon) INSTALL_ARGON=1; shift ;;
+            --argon-nvme-boot) ARGON_NVME_BOOT=1; shift ;;
             --allow-unsupported-os) ALLOW_UNSUPPORTED=1; shift ;;
             # Drift-check subcommands: print embedded assets and exit (no root needed).
             --print-unit)
@@ -604,6 +742,11 @@ main() {
 
     if [[ -n "${SET_SOURCE}" ]]; then
         set_source "${SET_SOURCE}"
+        exit 0
+    fi
+
+    if [[ "${INSTALL_ARGON}" -eq 1 ]]; then
+        install_argon_case
         exit 0
     fi
 
