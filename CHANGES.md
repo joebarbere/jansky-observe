@@ -6,6 +6,19 @@ milestones**). Work that landed outside a milestone gets a brief summary under t
 that shipped it. Maintained as part of `/release` — a release isn't finished until its
 section exists here.
 
+## v0.10.4 — 2026-07-14 — Steady waterfall + exact total-power readout
+
+Follow-up to `v0.10.3` from live feedback — browser-only, no milestone, no schema change.
+
+- **Waterfall is steady between frames** (`static/waterfall.js`): the sub-frame smooth-scroll
+  *glide* is now off. Even crisp and integer-aligned (`v0.10.3`), the continuous inter-frame
+  motion read as distracting "movement"; the waterfall now holds still between frames and
+  advances one row when a new frame arrives. One-line toggle in the source restores the glide.
+- **Exact total-power value on the strip** (`static/totalpower.js`): the current total power is
+  now drawn prominently (bold, top-right of the strip) as well as in the status row, so the
+  trace gives the trend and the number gives the exact value at a glance. (The narrow-range
+  y-axis labels also carry a decimal now, so they no longer collapse to duplicates.)
+
 ## v0.10.3 — 2026-07-14 — Total-power strip + waterfall flicker fix
 
 Between-milestones cockpit work — no milestone, no schema change (`user_version` stays 11),

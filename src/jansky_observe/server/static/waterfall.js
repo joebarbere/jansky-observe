@@ -121,9 +121,12 @@
   // (EMA). Disabled for prefers-reduced-motion.
   let frameIntervalMs = 250;
   let rafPending = false;
-  const SMOOTH_SCROLL = !(
-    window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches
-  );
+  // Sub-frame smooth-scroll (a continuous glide between the ~4 fps frames) is OFF:
+  // the constant inter-frame motion read as distracting "movement" in the waterfall.
+  // With it off the waterfall is steady between frames and simply advances one crisp
+  // row when a new frame arrives. To restore the glide, set this back to
+  //   !(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches)
+  const SMOOTH_SCROLL = false;
   // Offscreen waterfall history: width = n_fft, height = HISTORY_ROWS.
   const off = { canvas: null, ctx: null, nfft: 0, rows: 0 };
   // Accumulating average: Float64 sum over frames, keyed by stream params.
