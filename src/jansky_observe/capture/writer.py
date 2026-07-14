@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any
+from typing import IO, Any
 
 import numpy as np
 
@@ -27,33 +27,68 @@ __all__ = ["NpzCaptureWriter", "SigmfCaptureWriter"]
 
 
 class NpzCaptureWriter:
-    """Accumulate spectral frames; write one ``.npz`` on :meth:`close`."""
+    """Stream spectral frames to disk; assemble one ``.npz`` on :meth:`close`.
+
+    Each ``power_db`` row is appended to a temporary raw ``float32`` file as it
+    arrives, rather than retaining every :class:`SpectralFrame` in a list until
+    close. Memory stays O(1) in capture length — a multi-hour unattended run (the
+    scheduler / drift-scan campaigns) no longer accumulates ~100 MB+/hour of live
+    Python objects, and close no longer spikes RAM with an ``np.stack`` of the whole
+    history. The output ``.npz`` is byte-identical to the old in-memory path (the
+    same ``power_db`` 2-D ``float32`` array, ``timestamps``, scalars and settings).
+    """
 
     def __init__(self, path: str | Path, settings: dict[str, Any] | None = None) -> None:
         self.path = Path(path)
         self._settings = dict(settings or {})
-        self._frames: list[SpectralFrame] = []
+        # Rows spill here as raw little-endian float32, C-order (n_frames, n_fft).
+        self._rows_path = self.path.parent / (self.path.name + ".rows.tmp")
+        self._rows: IO[bytes] | None = None  # opened lazily on the first frame
+        self._timestamps: list[float] = []  # 8 B/frame — cheap to hold
+        self._n_fft: int | None = None
+        self._n_frames = 0
+        self._first_axes: tuple[float, float] | None = None  # (center_hz, rate_hz)
         self.bytes_written = 0
 
     def add_frame(self, frame: SpectralFrame) -> None:
-        """Record one published frame."""
-        self._frames.append(frame)
-        self.bytes_written += frame.power_db.nbytes + 8
+        """Record one published frame (streamed straight to the spill file)."""
+        row = np.ascontiguousarray(frame.power_db, dtype="<f4")
+        if self._rows is None:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            self._rows = open(self._rows_path, "wb")  # noqa: SIM115  # closed in close()
+            self._n_fft = row.size
+            self._first_axes = (frame.center_freq_hz, frame.sample_rate_hz)
+        elif row.size != self._n_fft:
+            raise ValueError(f"frame n_fft changed within a capture: {row.size} != {self._n_fft}")
+        self._rows.write(row.tobytes())
+        self._timestamps.append(float(frame.timestamp))
+        self._n_frames += 1
+        self.bytes_written += row.nbytes + 8
 
     def close(self) -> Path:
-        """Write the ``.npz`` and return its path."""
-        if not self._frames:
+        """Assemble the ``.npz`` from the spill file and return its path."""
+        if self._rows is None:
             raise RuntimeError("no frames captured")
-        first = self._frames[0]
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        np.savez(
-            self.path,
-            power_db=np.stack([f.power_db for f in self._frames]),
-            timestamps=np.array([f.timestamp for f in self._frames], dtype=np.float64),
-            center_freq_hz=first.center_freq_hz,
-            sample_rate_hz=first.sample_rate_hz,
-            settings=json.dumps({**self._settings, "software_version": __version__}),
+        self._rows.close()
+        assert self._n_fft is not None and self._first_axes is not None
+        center_freq_hz, sample_rate_hz = self._first_axes
+        # memmap the spill file so np.savez streams it into the zip in bounded-size
+        # chunks (never materializing the full history in RAM).
+        power_db = np.memmap(
+            self._rows_path, dtype="<f4", mode="r", shape=(self._n_frames, self._n_fft)
         )
+        try:
+            np.savez(
+                self.path,
+                power_db=power_db,
+                timestamps=np.array(self._timestamps, dtype=np.float64),
+                center_freq_hz=center_freq_hz,
+                sample_rate_hz=sample_rate_hz,
+                settings=json.dumps({**self._settings, "software_version": __version__}),
+            )
+        finally:
+            del power_db  # release the mapping before removing the spill file
+            self._rows_path.unlink(missing_ok=True)
         self.bytes_written = self.path.stat().st_size
         return self.path
 

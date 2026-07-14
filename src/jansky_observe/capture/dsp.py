@@ -6,6 +6,8 @@ spectrum (dB) that :mod:`jansky_observe.frames` carries over the wire.
 
 from __future__ import annotations
 
+from functools import lru_cache
+
 import numpy as np
 from scipy import signal
 
@@ -13,6 +15,19 @@ _PSD_FLOOR = 1e-20
 """Smallest PSD value passed to log10, i.e. a -200 dB floor (avoids -inf)."""
 
 __all__ = ["welch_psd_db"]
+
+
+@lru_cache(maxsize=8)
+def _welch_window(window: str, n_fft: int) -> np.ndarray:
+    """The Welch window array, built once per ``(window, n_fft)``.
+
+    Passing the precomputed array to :func:`scipy.signal.welch` is numerically
+    identical to passing the ``window`` string — ``welch`` internally calls
+    exactly this ``get_window(window, nperseg)`` (periodic / ``fftbins=True``) —
+    but avoids rederiving the window and revalidating it on every frame. The
+    result is treated read-only by ``welch``; do not mutate it.
+    """
+    return signal.get_window(window, n_fft)
 
 
 def welch_psd_db(
@@ -56,7 +71,7 @@ def welch_psd_db(
     _, psd = signal.welch(
         iq,
         fs=sample_rate_hz,
-        window=window,
+        window=_welch_window(window, n_fft),
         nperseg=n_fft,
         noverlap=0,
         detrend=False,

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
+from scipy import signal
 
 from jansky_observe.capture.dsp import welch_psd_db
 
@@ -41,3 +42,26 @@ def test_output_dtype_and_length() -> None:
 def test_rejects_short_input() -> None:
     with pytest.raises(ValueError, match="n_fft"):
         welch_psd_db(np.zeros(100, dtype=np.complex64), 3e6, 256)
+
+
+def test_precomputed_window_is_bit_identical_to_string_window() -> None:
+    """The cached window array must give results identical to scipy's string window.
+
+    The classifier's SNR thresholds are calibrated against these exact dB values,
+    so the per-frame window-caching optimization must change nothing numerically.
+    """
+    rng = np.random.default_rng(1420)
+    iq = (rng.standard_normal(4096) + 1j * rng.standard_normal(4096)).astype(np.complex64)
+    got = welch_psd_db(iq, 3e6, 512)
+    _, ref = signal.welch(
+        iq,
+        fs=3e6,
+        window="hann",
+        nperseg=512,
+        noverlap=0,
+        detrend=False,
+        return_onesided=False,
+        scaling="density",
+    )
+    ref_db = (10.0 * np.log10(np.maximum(np.fft.fftshift(ref), 1e-20))).astype(np.float32)
+    assert np.array_equal(got, ref_db)
