@@ -222,11 +222,15 @@
     if (off.rows < HISTORY_ROWS) off.rows++;
   }
 
-  function scrollOffset(h) {
-    // 0 just after a frame → up to one visible row-height as the next frame nears.
+  function scrollOffsetPx(h) {
+    // Sub-frame downward glide, rounded to WHOLE device pixels. A *fractional*
+    // dest offset makes the nearest-neighbour row scaling resample to a different
+    // pixel grid on every animation frame — which reads as a shimmering, flickering
+    // waterfall. Snapping to whole pixels keeps the rows crisp and still. 0 just
+    // after a frame, up to one row-height as the next frame nears.
     if (!SMOOTH_SCROLL || frameIntervalMs <= 0) return 0;
     const frac = Math.min(1, (Date.now() - lastFrameAt) / frameIntervalMs);
-    return frac * (h / HISTORY_ROWS);
+    return Math.round(frac * (h / HISTORY_ROWS));
   }
 
   function drawWaterfall() {
@@ -236,9 +240,16 @@
     wfCtx.fillRect(0, 0, w, h);
     if (!off.canvas || off.rows === 0) return;
     wfCtx.imageSmoothingEnabled = false;
-    // Shift the whole history down by the sub-frame fraction; the thin gap at
-    // the top is where the next row will land.
-    wfCtx.drawImage(off.canvas, 0, 0, off.nfft, HISTORY_ROWS, 0, scrollOffset(h), w, h);
+    const offset = scrollOffsetPx(h);
+    // The history, glided down by whole pixels.
+    wfCtx.drawImage(off.canvas, 0, 0, off.nfft, HISTORY_ROWS, 0, offset, w, h);
+    // Fill the strip the glide opens at the top with the newest row (source y=0)
+    // instead of the background. That gap otherwise grows then snaps shut every
+    // frame — the flicker at the leading edge. Holding the newest row there is
+    // seamless: the next frame simply replaces this fill.
+    if (offset > 0) {
+      wfCtx.drawImage(off.canvas, 0, 0, off.nfft, 1, 0, 0, w, offset);
+    }
   }
 
   // Redraw the waterfall each animation frame while data is live, so the
@@ -403,6 +414,7 @@
     drawWaterfall();
     scheduleWaterfallAnim();
     if (window.SpectrumAudio) window.SpectrumAudio.pushFrame(frame.header, frame.power);
+    if (window.TotalPower) window.TotalPower.pushFrame(frame.header, frame.power);
   }
 
   // ---- audio sonification controls (roadmap M6) ----------------------------
