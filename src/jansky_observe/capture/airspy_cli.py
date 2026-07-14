@@ -167,7 +167,20 @@ class AirspyRxSource:
                     )
                 if not self._data_ready.wait(timeout=deadline - time.monotonic()):
                     raise RuntimeError("timed out waiting for samples from airspy_rx")
-            tail = np.concatenate(list(self._ring))[-needed:]
+            # Copy only the newest blocks that cover `needed`, not the whole ring.
+            # The ring holds ~ring_seconds of stream (MBs); a frame needs ~64 KB, so
+            # concatenating the entire ring every frame wasted ~all of that copy AND
+            # held this lock (which blocks the drain thread) far longer than necessary.
+            # Walk from the newest block back until we have enough, newest-last.
+            newest: list[np.ndarray] = []
+            have = 0
+            for block in reversed(self._ring):
+                newest.append(block)
+                have += block.size
+                if have >= needed:
+                    break
+            newest.reverse()
+            tail = np.concatenate(newest)[-needed:]
         iq = tail.astype(np.float32) / 32768.0
         return (iq[0::2] + 1j * iq[1::2]).astype(np.complex64)
 

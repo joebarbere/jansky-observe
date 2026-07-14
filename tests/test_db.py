@@ -26,6 +26,18 @@ def test_get_engine_creates_data_dir_and_file_path(tmp_path: Path) -> None:
     assert engine.url.database == str(data_dir / "jansky-observe.sqlite3")
 
 
+def test_engine_applies_wal_and_pragmas(tmp_path: Path) -> None:
+    """Every connection comes up in WAL with the tuned pragmas (flash-storage safety)."""
+    engine = db.get_engine(tmp_path / "data")
+    with engine.connect() as conn:
+        assert conn.exec_driver_sql("PRAGMA journal_mode").scalar_one().lower() == "wal"
+        assert int(conn.exec_driver_sql("PRAGMA busy_timeout").scalar_one()) == 5000
+        assert int(conn.exec_driver_sql("PRAGMA synchronous").scalar_one()) == 1  # NORMAL
+    # A second connection is tuned independently (the listener fires per-connect).
+    with engine.connect() as conn2:
+        assert conn2.exec_driver_sql("PRAGMA journal_mode").scalar_one().lower() == "wal"
+
+
 def test_init_db_fresh_creates_everything(tmp_path: Path) -> None:
     engine = db.init_db(tmp_path / "data")
     assert (tmp_path / "data" / "jansky-observe.sqlite3").is_file()

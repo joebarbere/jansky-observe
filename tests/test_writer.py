@@ -43,6 +43,30 @@ def test_npz_empty_capture_raises(tmp_path):
     writer = NpzCaptureWriter(tmp_path / "cap.npz")
     with pytest.raises(RuntimeError, match="no frames"):
         writer.close()
+    # Lazy spill: a writer that never saw a frame leaves no temp file behind.
+    assert not (tmp_path / "cap.npz.rows.tmp").exists()
+
+
+def test_npz_streams_to_disk_and_cleans_up(tmp_path):
+    writer = NpzCaptureWriter(tmp_path / "cap.npz", {"gain": 16})
+    spill = tmp_path / "cap.npz.rows.tmp"
+    for seq in range(20):
+        writer.add_frame(_frame(seq, n_fft=128))
+    assert spill.exists()  # rows are streamed out during the capture, not held in RAM
+    path = writer.close()
+    data = np.load(path)
+    assert data["power_db"].shape == (20, 128)
+    assert data["power_db"].dtype == np.float32
+    assert np.all(data["power_db"][7] == 7.0)  # row order preserved
+    assert data["timestamps"].shape == (20,)
+    assert not spill.exists()  # spill file removed once the .npz is assembled
+
+
+def test_npz_rejects_changing_n_fft(tmp_path):
+    writer = NpzCaptureWriter(tmp_path / "cap.npz")
+    writer.add_frame(_frame(0, n_fft=64))
+    with pytest.raises(ValueError, match="n_fft changed"):
+        writer.add_frame(_frame(1, n_fft=128))
 
 
 def test_sigmf_streams_int16_and_reads_back_via_jansky(tmp_path):

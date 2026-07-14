@@ -6,6 +6,36 @@ milestones**). Work that landed outside a milestone gets a brief summary under t
 that shipped it. Maintained as part of `/release` — a release isn't finished until its
 section exists here.
 
+## v0.10.2 — 2026-07-14 — Performance & resource efficiency
+
+Between-milestones performance pass — no milestone, no schema change (`user_version` stays
+11), no `install.sh`/`OS_IMAGE` change (so no QEMU gate). Four hot-path / resource fixes from
+a review of the capture → DSP → server → SQLite pipeline on the Pi 5. **No behavior or
+numerics change** — the DSP and npz paths are guarded by bit-identical / byte-identical tests.
+
+- **Airspy live-view read is O(needed), not O(ring)** (`capture/airspy_cli.py`): `read()` no
+  longer `np.concatenate`s the entire (~MBs, ~0.5 s) live-view ring every frame just to keep
+  the newest ~64 KB. It now copies only the newest ring blocks that cover the request (a
+  newest-first walk), cutting ~24 MB/s of wasted memory bandwidth on the real-Airspy path and
+  shortening the lock hold that the pipe-drain thread contends for.
+- **SQLite runs in WAL with tuned pragmas** (`db.py`): every connection comes up
+  `journal_mode=WAL`, `synchronous=NORMAL`, `busy_timeout=5000`. Removes the per-commit fsync
+  stall on the Pi's flash storage, lets readers proceed during a write, and waits out a
+  contended write instead of raising `database is locked` (the server runs scheduler +
+  tracking writer loops alongside every request). Adds `-wal`/`-shm` sidecar files next to the
+  DB — data-dir tooling copies the whole directory, so nothing else changes.
+- **npz captures stream to disk** (`capture/writer.py`): `NpzCaptureWriter` spills each
+  spectrum row to a temp raw-`float32` file as it arrives and memmaps it into the `.npz` at
+  close, instead of holding every `SpectralFrame` in RAM and `np.stack`-ing the whole history
+  at close. Memory is now O(1) in capture length — a multi-hour unattended scheduler /
+  drift-scan run no longer accumulates ~100 MB+/hour of live objects. The `.npz` output is
+  byte-identical (a round-trip test guards it).
+- **Welch window is cached, not rederived per frame** (`capture/dsp.py`): the Hann window is
+  built once per `(window, n_fft)` and passed to `scipy.signal.welch` as an array rather than
+  a string, skipping `get_window` + input revalidation each frame. Output is provably
+  identical — a bit-for-bit test pins it against the string-window path, since the classifier's
+  SNR thresholds depend on these exact dB values.
+
 ## v0.10.1 — 2026-07-13 — Argon ONE V5 case setup
 
 Between-milestones convenience for the physical build — no milestone, no schema change

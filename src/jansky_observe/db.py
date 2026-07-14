@@ -35,7 +35,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from pathlib import Path
 
-from sqlalchemy import Connection, Engine, create_engine
+from sqlalchemy import Connection, Engine, create_engine, event
 from sqlmodel import Session, SQLModel
 
 from jansky_observe import models  # noqa: F401  # register every table on SQLModel.metadata
@@ -44,6 +44,27 @@ from jansky_observe.seeds import seed_all
 __all__ = ["DB_FILENAME", "MIGRATIONS", "get_engine", "init_db", "migrate", "session"]
 
 DB_FILENAME = "jansky-observe.sqlite3"
+
+
+def _apply_sqlite_pragmas(dbapi_conn: object, _record: object) -> None:
+    """Tune each new SQLite connection for the Pi's flash storage + concurrent loops.
+
+    Defaults (``journal_mode=DELETE``, ``synchronous=FULL``) fsync on every commit
+    and take a whole-file write lock that blocks readers — costly on an SD card / USB
+    SSD, and the server runs several writer loops (scheduler, tracking) alongside every
+    request. WAL lets readers proceed during a write; ``synchronous=NORMAL`` is durable
+    under WAL while dropping the per-commit fsync stall; ``busy_timeout`` waits out a
+    contended write instead of raising ``database is locked``. WAL is a persistent
+    per-file mode (idempotent to re-set) and adds ``-wal``/``-shm`` sidecar files
+    alongside the DB — data-dir tooling copies the whole directory, so nothing to do.
+    """
+    cur = dbapi_conn.cursor()  # type: ignore[attr-defined]
+    try:
+        cur.execute("PRAGMA journal_mode=WAL")
+        cur.execute("PRAGMA synchronous=NORMAL")
+        cur.execute("PRAGMA busy_timeout=5000")
+    finally:
+        cur.close()
 
 
 def get_engine(data_dir: str | Path) -> Engine:
@@ -57,11 +78,14 @@ def get_engine(data_dir: str | Path) -> Engine:
     Returns
     -------
     Engine
-        A SQLAlchemy engine for ``<data_dir>/jansky-observe.sqlite3``.
+        A SQLAlchemy engine for ``<data_dir>/jansky-observe.sqlite3``, with WAL +
+        pragma tuning applied on every connection (see :func:`_apply_sqlite_pragmas`).
     """
     path = Path(data_dir)
     path.mkdir(parents=True, exist_ok=True)
-    return create_engine(f"sqlite:///{path / DB_FILENAME}")
+    engine = create_engine(f"sqlite:///{path / DB_FILENAME}")
+    event.listen(engine, "connect", _apply_sqlite_pragmas)
+    return engine
 
 
 def _migration_1_initial_schema(conn: Connection) -> None:

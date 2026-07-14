@@ -52,6 +52,19 @@ def test_read_returns_complex64():
         source.close()
 
 
+def test_read_spanning_multiple_ring_blocks():
+    # 80k samples = 160k int16 values, larger than one drain block (131072 values),
+    # so read() must stitch together more than one ring block (the newest-first walk).
+    source = AirspyRxSource(binary=FAKE)
+    try:
+        iq = source.read(80_000)
+        assert iq.dtype == np.complex64
+        assert iq.shape == (80_000,)
+        assert np.all(np.abs(iq) <= np.sqrt(2))
+    finally:
+        source.close()
+
+
 def test_tap_is_gapless_while_live_reads_happen():
     source = AirspyRxSource(binary=FAKE, tap_max_seconds=8.0)
     try:
