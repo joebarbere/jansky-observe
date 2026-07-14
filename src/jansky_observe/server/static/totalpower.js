@@ -124,6 +124,12 @@ window.TotalPower = (function () {
     ctx.beginPath();
     ctx.arc(w - m.right, yOf(latest), 2.5 * dpr, 0, 2 * Math.PI);
     ctx.fill();
+
+    // Prominent exact value (top-right): the trace shows the trend, this is the number.
+    ctx.font = "bold " + 13 * dpr + "px monospace";
+    ctx.textAlign = "right";
+    ctx.textBaseline = "top";
+    ctx.fillText(latest.toFixed(1) + " dB", w - m.right, 2 * dpr);
   }
 
   function pushFrame(header, power) {
