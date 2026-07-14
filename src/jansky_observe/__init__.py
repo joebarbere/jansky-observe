@@ -19,4 +19,4 @@ Sibling of the `jansky` course (whose library helpers this reuses) and
 
 from __future__ import annotations
 
-__version__ = "0.10.4"
+__version__ = "0.10.5"
