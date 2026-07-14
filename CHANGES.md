@@ -6,6 +6,23 @@ milestones**). Work that landed outside a milestone gets a brief summary under t
 that shipped it. Maintained as part of `/release` — a release isn't finished until its
 section exists here.
 
+## v0.10.1 — 2026-07-13 — Argon ONE V5 case setup
+
+Between-milestones convenience for the physical build — no milestone, no schema change
+(`user_version` stays 11). Adds an installer switch to set up the Pi 5's Argon ONE V5 M.2
+NVMe case. **`install.sh` changed**, so this release is gated on the QEMU install gate
+before tagging. Nothing here touches the SDR/capture path or the bias-tee invariant.
+
+- **`--install-argon`** (+ optional `--argon-nvme-boot`): a standalone installer action
+  (exits after, like `--set-source`) that (1) idempotently enables the Pi 5 PCIe/M.2 slot
+  in `config.txt` (`dtparam=pciex1` + `pciex1_gen=3`) so the NVMe is detected, and (2) runs
+  Argon40's official V5 daemon installer (`argon1v5.sh`) for the case fan + power button.
+  Pi 5-guarded (refuses other hardware without `--allow-unsupported-os`); reboot afterwards
+  to bring up the slot. `--argon-nvme-boot` additionally sets an NVMe-first bootloader order
+  (`BOOT_ORDER=0xf416`, `PCIE_PROBE=1`) via `rpi-eeprom-config`, confirmed on a TTY (or
+  `--yes` on a non-TTY). Documented in `deploy/README.md`; `--help` updated. The embedded
+  systemd/udev heredocs are untouched, so the CI drift check is unaffected.
+
 ## v0.10.0 — 2026-07-13 — M9 "Rotator — Discovery Drive"
 
 Az/el rotator control for the KrakenRF Discovery Drive. Synthetic-first (built and

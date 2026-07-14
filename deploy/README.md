@@ -22,7 +22,25 @@ curl -fsSL https://github.com/joebarbere/jansky-observe/releases/latest/download
 Re-running upgrades in place. `sudo bash install.sh --uninstall` removes the services and
 venv but keeps the observation data in `/var/lib/jansky-observe`. See
 `bash install.sh --help` for all flags (`--version`, `--wheel`, `--jansky-ref`,
-`--no-start`, `--smoke`, `--allow-unsupported-os`).
+`--no-start`, `--smoke`, `--install-argon`, `--allow-unsupported-os`).
+
+### Argon ONE V5 M.2 NVMe case (optional hardware setup)
+
+The Pi 5 lives in an Argon ONE V5 M.2 NVMe case. This is a one-off physical-build step,
+independent of the app (it touches `config.txt`, the bootloader EEPROM, and Argon's own
+daemon — never the SDR/capture or bias-tee paths):
+
+```sh
+sudo bash install.sh --install-argon                    # PCIe/M.2 slot + fan/button daemon
+sudo bash install.sh --install-argon --argon-nvme-boot   # ...and boot from the NVMe
+```
+
+`--install-argon` enables the Pi 5 PCIe lane (`dtparam=pciex1` + `pciex1_gen=3` in
+`config.txt`, idempotent) so the M.2 NVMe is detected, and runs Argon40's official
+installer (`argon1v5.sh`) for the case fan + power button (`argonone-config`,
+`argononed.service`). It is Pi 5 only and needs a **reboot** to bring up the slot. Add
+`--argon-nvme-boot` to also set an NVMe-first bootloader order (`BOOT_ORDER=0xf416`,
+`PCIE_PROBE=1`) — boot-critical, so it's confirmed on a TTY (or `--yes`).
 
 ## What each piece is
 
