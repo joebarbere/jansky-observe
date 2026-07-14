@@ -59,9 +59,7 @@ class NpzCaptureWriter:
             self._n_fft = row.size
             self._first_axes = (frame.center_freq_hz, frame.sample_rate_hz)
         elif row.size != self._n_fft:
-            raise ValueError(
-                f"frame n_fft changed within a capture: {row.size} != {self._n_fft}"
-            )
+            raise ValueError(f"frame n_fft changed within a capture: {row.size} != {self._n_fft}")
         self._rows.write(row.tobytes())
         self._timestamps.append(float(frame.timestamp))
         self._n_frames += 1
