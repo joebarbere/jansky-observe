@@ -136,11 +136,18 @@ def test_spectrum_audio_wired_into_live_view() -> None:
         assert f'value="{option}"' in body
 
 
-def test_waterfall_has_smooth_scroll() -> None:
+def test_waterfall_renders_at_native_vertical_resolution() -> None:
     client = TestClient(create_app(Settings(zmq_endpoint=DEAD_ENDPOINT)))
     wf = client.get("/static/waterfall.js").text
-    assert "scheduleWaterfallAnim" in wf  # the rAF interpolation loop
-    assert "prefers-reduced-motion" in wf  # honored (disables the animation)
+    # The waterfall history is kept at the canvas's own vertical pixel resolution
+    # (one data row = one device pixel), so a row keeps its brightness as it scrolls
+    # — no vertical rescale, no per-row brightness flicker. Nearest-neighbour draw.
+    assert "ensureHistory(power.length, wfCanvas.height)" in wf
+    assert "off.height" in wf
+    assert "imageSmoothingEnabled = false" in wf
+    # The old fixed-320-row smooth-scroll interpolation is gone (it caused the flicker).
+    assert "scheduleWaterfallAnim" not in wf
+    assert "HISTORY_ROWS" not in wf
 
 
 def test_audio_js_served_with_modes_and_frame_tap() -> None:

@@ -66,7 +66,6 @@
   const hiResetEl = document.getElementById("hi-badge-reset");
 
   // ---- constants -------------------------------------------------------
-  const HISTORY_ROWS = 320; // waterfall depth (frames)
   const MARGIN = { left: 52, right: 10, top: 8, bottom: 22 };
   const RANGE_EMA = 0.05; // smoothing for the running color/dB range
   const STALE_MS = 3000; // no frame for this long => "waiting" state
@@ -115,20 +114,15 @@
   let lastFrameAt = 0;
   let frameCount = 0;
   let fps = 0;
-  // Smooth-scroll interpolation (roadmap M6): between the ~4 fps frames, the
-  // waterfall is redrawn each animation frame shifted a fraction of a row so it
-  // glides instead of stepping. frameIntervalMs is the observed inter-frame gap
-  // (EMA). Disabled for prefers-reduced-motion.
-  let frameIntervalMs = 250;
-  let rafPending = false;
-  // Sub-frame smooth-scroll (a continuous glide between the ~4 fps frames) is OFF:
-  // the constant inter-frame motion read as distracting "movement" in the waterfall.
-  // With it off the waterfall is steady between frames and simply advances one crisp
-  // row when a new frame arrives. To restore the glide, set this back to
-  //   !(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches)
-  const SMOOTH_SCROLL = false;
-  // Offscreen waterfall history: width = n_fft, height = HISTORY_ROWS.
-  const off = { canvas: null, ctx: null, nfft: 0, rows: 0 };
+  // Offscreen waterfall history rendered at the display's exact VERTICAL resolution:
+  // one data row = one device pixel, so a row keeps its exact brightness as it scrolls
+  // down — a true frozen-in-time record. The old buffer was a fixed 320 rows scaled to
+  // the canvas height with nearest-neighbour sampling; that ratio is non-integer, so a
+  // row was drawn 1px tall on some frames and 2px on others as it scrolled — the
+  // brighten/dim "flicker" you see following a single point. Width stays n_fft (the
+  // horizontal n_fft->width scale is fixed frame-to-frame, so it never flickers). There
+  // is no sub-frame glide: the waterfall advances one pixel when a new frame arrives.
+  const off = { canvas: null, ctx: null, nfft: 0, height: 0, rows: 0 };
   // Accumulating average: Float64 sum over frames, keyed by stream params.
   const avg = { sum: null, count: 0, key: "" };
 
@@ -192,24 +186,26 @@
   }
 
   // ---- waterfall ---------------------------------------------------------
-  function ensureHistory(nfft) {
-    if (off.canvas && off.nfft === nfft) return;
+  function ensureHistory(nfft, height) {
+    height = Math.max(1, height);
+    if (off.canvas && off.nfft === nfft && off.height === height) return;
+    // n_fft or canvas height changed → (re)build. History resets; both are rare
+    // (a resize or a stream-parameter change), and a reset is cleaner than a
+    // one-off rescale that would briefly reintroduce the very artifact we removed.
     off.canvas = document.createElement("canvas");
     off.canvas.width = nfft;
-    off.canvas.height = HISTORY_ROWS;
+    off.canvas.height = height;
     off.ctx = off.canvas.getContext("2d");
     off.nfft = nfft;
+    off.height = height;
     off.rows = 0;
   }
 
   function pushRow(power) {
-    ensureHistory(power.length);
-    // Scroll history down one row (newest row lives at y = 0).
-    off.ctx.drawImage(
-      off.canvas,
-      0, 0, off.nfft, HISTORY_ROWS - 1,
-      0, 1, off.nfft, HISTORY_ROWS - 1
-    );
+    ensureHistory(power.length, wfCanvas.height);
+    const H = off.height;
+    // Scroll history down one pixel (newest row lives at y = 0).
+    off.ctx.drawImage(off.canvas, 0, 0, off.nfft, H - 1, 0, 1, off.nfft, H - 1);
     const row = off.ctx.createImageData(off.nfft, 1);
     const px = row.data;
     const scale = 255 / (rangeHi - rangeLo);
@@ -222,18 +218,7 @@
       px[i * 4 + 3] = 255;
     }
     off.ctx.putImageData(row, 0, 0);
-    if (off.rows < HISTORY_ROWS) off.rows++;
-  }
-
-  function scrollOffsetPx(h) {
-    // Sub-frame downward glide, rounded to WHOLE device pixels. A *fractional*
-    // dest offset makes the nearest-neighbour row scaling resample to a different
-    // pixel grid on every animation frame — which reads as a shimmering, flickering
-    // waterfall. Snapping to whole pixels keeps the rows crisp and still. 0 just
-    // after a frame, up to one row-height as the next frame nears.
-    if (!SMOOTH_SCROLL || frameIntervalMs <= 0) return 0;
-    const frac = Math.min(1, (Date.now() - lastFrameAt) / frameIntervalMs);
-    return Math.round(frac * (h / HISTORY_ROWS));
+    if (off.rows < H) off.rows++;
   }
 
   function drawWaterfall() {
@@ -243,32 +228,9 @@
     wfCtx.fillRect(0, 0, w, h);
     if (!off.canvas || off.rows === 0) return;
     wfCtx.imageSmoothingEnabled = false;
-    const offset = scrollOffsetPx(h);
-    // The history, glided down by whole pixels.
-    wfCtx.drawImage(off.canvas, 0, 0, off.nfft, HISTORY_ROWS, 0, offset, w, h);
-    // Fill the strip the glide opens at the top with the newest row (source y=0)
-    // instead of the background. That gap otherwise grows then snaps shut every
-    // frame — the flicker at the leading edge. Holding the newest row there is
-    // seamless: the next frame simply replaces this fill.
-    if (offset > 0) {
-      wfCtx.drawImage(off.canvas, 0, 0, off.nfft, 1, 0, 0, w, offset);
-    }
-  }
-
-  // Redraw the waterfall each animation frame while data is live, so the
-  // sub-frame scroll is smooth. Idle (stale) → stop until the next frame.
-  function animateWaterfall() {
-    rafPending = false;
-    if (!SMOOTH_SCROLL) return;
-    if (Date.now() - lastFrameAt >= STALE_MS) return;
-    drawWaterfall();
-    scheduleWaterfallAnim();
-  }
-
-  function scheduleWaterfallAnim() {
-    if (rafPending || !SMOOTH_SCROLL) return;
-    rafPending = true;
-    requestAnimationFrame(animateWaterfall);
+    // Vertical is 1:1 (off.height === h in steady state), so a row never resamples
+    // as it scrolls; only the fixed horizontal n_fft->width scale applies.
+    wfCtx.drawImage(off.canvas, 0, 0, off.nfft, off.height, 0, 0, w, h);
   }
 
   // ---- spectrum ------------------------------------------------------------
@@ -398,14 +360,8 @@
       console.warn("bad frame:", err);
       return;
     }
-    const nowMs = Date.now();
-    if (lastFrameAt > 0) {
-      // EMA of the observed inter-frame gap, clamped to a sane range.
-      const gap = Math.min(2000, Math.max(50, nowMs - lastFrameAt));
-      frameIntervalMs += (gap - frameIntervalMs) * 0.3;
-    }
     latest = frame;
-    lastFrameAt = nowMs;
+    lastFrameAt = Date.now();
     frameCount++;
     updateRange(frame.power);
     accumulate(frame.header, frame.power);
@@ -415,7 +371,6 @@
     showOverlay(false);
     drawSpectrum();
     drawWaterfall();
-    scheduleWaterfallAnim();
     if (window.SpectrumAudio) window.SpectrumAudio.pushFrame(frame.header, frame.power);
     if (window.TotalPower) window.TotalPower.pushFrame(frame.header, frame.power);
   }

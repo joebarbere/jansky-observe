@@ -6,6 +6,23 @@ milestones**). Work that landed outside a milestone gets a brief summary under t
 that shipped it. Maintained as part of `/release` — a release isn't finished until its
 section exists here.
 
+## v0.10.5 — 2026-07-14 — Waterfall: no per-row brightness flicker
+
+Bugfix from live feedback (a screencast) — browser-only, no milestone, no schema change.
+
+- **A row keeps its exact brightness as it scrolls** (`static/waterfall.js`): the history
+  buffer was a fixed 320 rows scaled to the pane's pixel height with nearest-neighbour
+  sampling. Because that ratio is non-integer, each data row was drawn 1px tall on some frames
+  and 2px on others as it scrolled — so following a single point showed it brightening and
+  dimming, and the whole waterfall read as random rather than a frozen-in-time record. The
+  history is now rendered at the display's exact **vertical** resolution (one data row = one
+  device pixel), so a scroll is an exact whole-pixel shift with no resampling — verified by
+  reading the live canvas: the frame is a pixel-exact shift of the previous one (zero residual
+  at the true offset). Only the horizontal `n_fft`→width scale remains, and it's fixed
+  frame-to-frame so it never flickers. Waterfall history depth now follows the pane height
+  (deeper on bigger/hi-dpi displays) instead of a fixed 320 frames. The dormant sub-frame
+  smooth-scroll code (disabled in `v0.10.4`) is removed with this rework.
+
 ## v0.10.4 — 2026-07-14 — Steady waterfall + exact total-power readout
 
 Follow-up to `v0.10.3` from live feedback — browser-only, no milestone, no schema change.
