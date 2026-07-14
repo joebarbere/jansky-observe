@@ -32,7 +32,7 @@ flowchart LR
 
 **Feature-complete (M0–M9 all shipped):** capture (synthetic + real Airspy), observation
 records + session wizard + observing ladder, the `hline_v1` classifier with live HI badge and
-LSR axes, PDF reports + photos + Virgo/ezRA exporters, Stellarium cross-check, HackRF RFI
+LSR axes, a live total-power strip, PDF reports + photos + Virgo/ezRA exporters, Stellarium cross-check, HackRF RFI
 sweep, gpsd locations, the **`v0.7.0` station cockpit** (status bar, diagnostics MCP,
 archive/soft-delete, dark mode + localization, spectrum audio, `--fps` knob, RFI-survey
 template), the **`v0.8.0` calibration & scheduling** milestone (calibration epochs, an

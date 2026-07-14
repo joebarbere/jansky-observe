@@ -22,6 +22,7 @@
     <span class="stat"><b id="stat-fps">&ndash;</b> fps</span>
     <span class="stat">center <b id="stat-center">&ndash;</b> MHz</span>
     <span class="stat">span <b id="stat-span">&ndash;</b> MHz</span>
+    <span class="stat" title="integrated band power (dB, relative reference) — watch it peak as a source crosses the beam">TP <b id="stat-tp">&ndash;</b> dB</span>
     <span class="stat">avg <b id="avg-count">0</b> frames</span>
     <button id="btn-reset-avg" class="btn btn-small" type="button">Reset avg</button>
     <span class="ctl-group">
@@ -72,9 +73,13 @@
     <section id="waterfall-wrap" class="pane">
       <canvas id="waterfall"></canvas>
     </section>
+    <section id="totalpower-wrap" class="pane">
+      <canvas id="totalpower"></canvas>
+    </section>
     <div id="overlay">waiting for capture daemon&hellip;</div>
   </main>
   <script src="/static/audio.js"></script>
+  <script src="/static/totalpower.js"></script>
   <script src="/static/waterfall.js"></script>
 </body>
 </html>

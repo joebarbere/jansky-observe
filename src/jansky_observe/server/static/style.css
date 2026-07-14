@@ -267,6 +267,7 @@ main {
 
 #spectrum-wrap { flex: 0 0 34%; }
 #waterfall-wrap { flex: 1 1 auto; }
+#totalpower-wrap { flex: 0 0 15%; min-height: 64px; }
 
 canvas {
   display: block;

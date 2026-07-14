@@ -6,6 +6,27 @@ milestones**). Work that landed outside a milestone gets a brief summary under t
 that shipped it. Maintained as part of `/release` — a release isn't finished until its
 section exists here.
 
+## v0.10.3 — 2026-07-14 — Total-power strip + waterfall flicker fix
+
+Between-milestones cockpit work — no milestone, no schema change (`user_version` stays 11),
+no `install.sh`/`OS_IMAGE` change, no server change at all (browser-only). Two live-view items.
+
+- **Total-power strip** (`static/totalpower.js`, `templates/index.html`, `static/style.css`):
+  the classic single-dish total-power trace — integrated band power vs time — added to the live
+  view under the waterfall, plus a `TP … dB` readout in the status row. It is what you watch
+  during a Sun peak-up or a cold-sky-vs-ground check (total power rises/falls as a source
+  crosses the beam) and the basis of a drift scan. Computed **client-side** from the frames the
+  WebSocket already delivers — a numerically stable log-sum-exp mean of the PSD, in dB relative
+  to the same reference as the spectrum — so it adds no backend and no extra Pi load, like the
+  audio sonifier. Autoscaled, theme-aware, and it resets when the stream parameters change.
+- **Waterfall flicker fixed** (`static/waterfall.js`): the sub-frame smooth-scroll used a
+  *fractional* pixel offset, which re-sampled the nearest-neighbour row scaling onto a different
+  grid every animation frame — a visible shimmer — and left a background gap at the top edge
+  that grew then snapped shut each frame. The glide is now rounded to whole device pixels (crisp,
+  still rows) and the strip the glide opens at the top is filled with the newest row instead of
+  the background, so the leading edge is seamless. `prefers-reduced-motion` still disables the
+  glide entirely.
+
 ## v0.10.2 — 2026-07-14 — Performance & resource efficiency
 
 Between-milestones performance pass — no milestone, no schema change (`user_version` stays
