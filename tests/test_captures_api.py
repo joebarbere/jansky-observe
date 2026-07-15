@@ -487,6 +487,259 @@ def test_detail_page_shows_classify_button_and_verdicts(
     assert "detected" in body  # existing results render inline on reload
 
 
+# ---- ON/OFF position switching + difference (roadmap M10) --------------------------
+
+
+def _write_flat_capture(path: Path, seed: int = 2, n_frames: int = 8, n_fft: int = 256) -> Path:
+    """Write an .npz capture of synthetic frames with NO HI line (a flat OFF)."""
+    gen = rng(seed)
+    writer = NpzCaptureWriter(path, settings=CAPTURE_SETTINGS)
+    samples_per_frame = n_fft * 32
+    for i in range(n_frames):
+        iq = synthetic.hi_iq_chunk(
+            samples_per_frame,
+            gen,
+            t0_s=i * samples_per_frame / RATE_HZ,
+            center_freq_hz=CENTER_HZ,
+            sample_rate_hz=RATE_HZ,
+            line_amplitude=0.0,
+        )
+        writer.add_frame(
+            SpectralFrame(
+                seq=i,
+                timestamp=1_750_000_000.0 + i * 0.5,
+                center_freq_hz=CENTER_HZ,
+                sample_rate_hz=RATE_HZ,
+                power_db=welch_psd_db(iq, RATE_HZ, n_fft),
+            )
+        )
+    return writer.close()
+
+
+def _set_position(engine: Engine, capture_id: int, position: str, pair: int | None = None) -> None:
+    """Directly set a capture's ON/OFF position + pairing (bypassing the route)."""
+    with Session(engine) as session:
+        capture = session.get(Capture, capture_id)
+        assert capture is not None
+        capture.position = position
+        capture.pair_capture_id = pair
+        session.add(capture)
+        session.commit()
+
+
+def test_set_position_off_and_pair(client: TestClient, engine: Engine, tmp_path) -> None:
+    obs_id = _running_observation(engine)
+    on = _add_capture(
+        engine, _write_capture(tmp_path / "captures" / "on.npz"), observation_id=obs_id
+    )
+    off = _add_capture(
+        engine, _write_flat_capture(tmp_path / "captures" / "off.npz"), observation_id=obs_id
+    )
+    resp = client.post(
+        f"/captures/{off}/position",
+        data={"position": "off", "pair_capture_id": str(on)},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 303
+    assert resp.headers["location"] == f"/observations/{obs_id}"
+    with Session(engine) as session:
+        row = session.get(Capture, off)
+        assert row is not None and row.position == "off" and row.pair_capture_id == on
+    # Setting it back to ON clears the pairing.
+    client.post(f"/captures/{off}/position", data={"position": "on"}, follow_redirects=False)
+    with Session(engine) as session:
+        row = session.get(Capture, off)
+        assert row is not None and row.position == "on" and row.pair_capture_id is None
+
+
+def test_set_position_bad_value_422(client: TestClient, engine: Engine, tmp_path) -> None:
+    cap = _add_capture(engine, _write_capture(tmp_path / "captures" / "c.npz"))
+    assert (
+        client.post(f"/captures/{cap}/position", data={"position": "sideways"}).status_code == 422
+    )
+
+
+def test_set_position_pair_not_on_422(client: TestClient, engine: Engine, tmp_path) -> None:
+    obs_id = _running_observation(engine)
+    a = _add_capture(engine, _write_capture(tmp_path / "captures" / "a.npz"), observation_id=obs_id)
+    b = _add_capture(
+        engine, _write_flat_capture(tmp_path / "captures" / "b.npz"), observation_id=obs_id
+    )
+    _set_position(engine, a, "off")  # a is itself an OFF, not a valid pair target
+    resp = client.post(
+        f"/captures/{b}/position", data={"position": "off", "pair_capture_id": str(a)}
+    )
+    assert resp.status_code == 422
+
+
+def test_set_position_pair_other_observation_422(
+    client: TestClient, engine: Engine, tmp_path
+) -> None:
+    obs_a = _running_observation(engine)
+    on_other = _add_capture(
+        engine, _write_capture(tmp_path / "captures" / "on.npz"), observation_id=obs_a
+    )
+    off = _add_capture(engine, _write_flat_capture(tmp_path / "captures" / "off.npz"))  # no obs
+    resp = client.post(
+        f"/captures/{off}/position", data={"position": "off", "pair_capture_id": str(on_other)}
+    )
+    assert resp.status_code == 422
+
+
+def _on_off_pair(
+    engine: Engine, tmp_path, *, observation_id: int | None = None, start: datetime | None = None
+) -> tuple[int, int]:
+    """An ON (with line) + a paired flat OFF, both in the same observation."""
+    on = _add_capture(
+        engine,
+        _write_capture(tmp_path / "captures" / "on.npz"),
+        observation_id=observation_id,
+        start=start,
+    )
+    off = _add_capture(
+        engine,
+        _write_flat_capture(tmp_path / "captures" / "off.npz"),
+        observation_id=observation_id,
+    )
+    _set_position(engine, off, "off", pair=on)
+    return on, off
+
+
+def test_difference_mhz_infers_pair(client: TestClient, engine: Engine, tmp_path) -> None:
+    on, off = _on_off_pair(engine, tmp_path)
+    body = client.get(f"/api/captures/{on}/difference").json()
+    assert body["axis_kind"] == "mhz"
+    assert body["ref_capture_id"] == off
+    assert len(body["axis"]) == len(body["power_db"]) == 256
+    power = np.asarray(body["power_db"])
+    assert power.max() > 1.0  # the ratio bumps up where the ON line is
+
+
+def test_difference_explicit_ref(client: TestClient, engine: Engine, tmp_path) -> None:
+    on, off = _on_off_pair(engine, tmp_path)
+    body = client.get(f"/api/captures/{on}/difference", params={"ref": off}).json()
+    assert body["ref_capture_id"] == off
+
+
+def test_difference_no_pair_422(client: TestClient, engine: Engine, tmp_path) -> None:
+    on = _add_capture(engine, _write_capture(tmp_path / "captures" / "on.npz"))
+    assert client.get(f"/api/captures/{on}/difference").status_code == 422
+
+
+def test_difference_ref_not_off_422(client: TestClient, engine: Engine, tmp_path) -> None:
+    on = _add_capture(engine, _write_capture(tmp_path / "captures" / "on.npz"))
+    other = _add_capture(
+        engine, _write_flat_capture(tmp_path / "captures" / "o.npz")
+    )  # position=on
+    assert client.get(f"/api/captures/{on}/difference", params={"ref": other}).status_code == 422
+
+
+def test_difference_axis_mismatch_422(client: TestClient, engine: Engine, tmp_path) -> None:
+    obs_id = _running_observation(engine)
+    on = _add_capture(
+        engine, _write_capture(tmp_path / "captures" / "on.npz", n_fft=256), observation_id=obs_id
+    )
+    off = _add_capture(
+        engine,
+        _write_flat_capture(tmp_path / "captures" / "off.npz", n_fft=128),
+        observation_id=obs_id,
+    )
+    _set_position(engine, off, "off", pair=on)
+    assert client.get(f"/api/captures/{on}/difference").status_code == 422
+
+
+def test_difference_missing_file_404(client: TestClient, engine: Engine, tmp_path) -> None:
+    on, off = _on_off_pair(engine, tmp_path)
+    client.post(f"/captures/{off}/purge")  # reclaim the OFF's bytes
+    assert client.get(f"/api/captures/{on}/difference").status_code == 404
+
+
+def test_difference_vlsr_needs_observation_409(
+    client: TestClient, engine: Engine, tmp_path
+) -> None:
+    on, off = _on_off_pair(engine, tmp_path)  # no observation link
+    resp = client.get(f"/api/captures/{on}/difference", params={"axis": "vlsr"})
+    assert resp.status_code == 409
+
+
+def test_difference_vlsr_with_observation(client: TestClient, engine: Engine, tmp_path) -> None:
+    obs_id = _running_observation(engine)
+    on, off = _on_off_pair(engine, tmp_path, observation_id=obs_id, start=WHEN)
+    body = client.get(f"/api/captures/{on}/difference", params={"axis": "vlsr"}).json()
+    assert body["axis_kind"] == "vlsr"
+    axis = np.asarray(body["axis"])
+    assert np.all(np.diff(axis) < 0)  # v_LSR decreases with frequency
+
+
+def test_classify_difference_detected(client: TestClient, engine: Engine, tmp_path) -> None:
+    obs_id = _running_observation(engine)
+    on, off = _on_off_pair(engine, tmp_path, observation_id=obs_id, start=WHEN)
+    resp = client.post(f"/api/captures/{on}/classify_difference")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["name"] == "hline_v1_onoff" and body["version"] == "1"
+    assert body["verdict"] == "detected"
+    assert body["score"] >= 5.0
+    assert body["params"]["ref_capture_id"] == off
+    assert body["params"]["method"] == "ratio"
+    assert body["params"]["window_source"] == "lsr"
+    plot = Path(body["plot_path"])
+    assert plot == tmp_path / "plots" / f"capture-{on}-hline_v1_onoff.png"
+    assert plot.is_file() and plot.stat().st_size > 0
+
+    # The difference-plot route serves it (distinct from the single-capture plot).
+    assert client.get(f"/api/captures/{on}/difference_plot").status_code == 200
+
+    with Session(engine) as session:
+        rows = session.exec(select(ClassifierResult).where(ClassifierResult.capture_id == on)).all()
+        assert len(rows) == 1 and rows[0].name == "hline_v1_onoff"
+
+
+def test_classify_difference_no_line_not_detected(
+    client: TestClient, engine: Engine, tmp_path
+) -> None:
+    # No observation link → fixed window; two independent blank fields → no bump.
+    on = _add_capture(engine, _write_flat_capture(tmp_path / "captures" / "on.npz", seed=5))
+    off = _add_capture(engine, _write_flat_capture(tmp_path / "captures" / "off.npz", seed=6))
+    _set_position(engine, off, "off", pair=on)
+    body = client.post(f"/api/captures/{on}/classify_difference").json()
+    assert body["verdict"] == "not_detected"
+    assert body["score"] < 2.0
+
+
+def test_classify_difference_axis_mismatch_422(
+    client: TestClient, engine: Engine, tmp_path
+) -> None:
+    obs_id = _running_observation(engine)
+    on = _add_capture(
+        engine, _write_capture(tmp_path / "captures" / "on.npz", n_fft=256), observation_id=obs_id
+    )
+    off = _add_capture(
+        engine,
+        _write_flat_capture(tmp_path / "captures" / "off.npz", n_fft=128),
+        observation_id=obs_id,
+    )
+    _set_position(engine, off, "off", pair=on)
+    assert client.post(f"/api/captures/{on}/classify_difference").status_code == 422
+
+
+def test_classify_difference_fragment_and_button(
+    client: TestClient, engine: Engine, tmp_path
+) -> None:
+    obs_id = _running_observation(engine)
+    on, off = _on_off_pair(engine, tmp_path, observation_id=obs_id, start=WHEN)
+
+    # The detail page offers the difference button on the paired ON capture.
+    page = client.get(f"/observations/{obs_id}").text
+    assert f"/captures/{on}/classify_difference" in page
+    assert "Classify difference" in page
+
+    fragment = client.post(f"/captures/{on}/classify_difference")
+    assert fragment.status_code == 200
+    assert "detected" in fragment.text
+    assert f"/api/captures/{on}/difference_plot" in fragment.text
+
+
 def _rfi_observation(engine: Engine) -> int:
     """Create an observation of the 'RFI survey @ 1420' type."""
     with Session(engine) as session:

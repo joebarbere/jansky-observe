@@ -24,19 +24,27 @@ from astropy.coordinates import SkyCoord
 
 from jansky_observe.astro.lsr import HI_LINE_FREQ_HZ, doppler_window_hz
 from jansky_observe.confirm.baseline import db_to_linear, fit_baseline, linear_to_db
+from jansky_observe.confirm.onoff import difference_spectrum
 
 __all__ = [
     "CLASSIFIER_NAME",
+    "CLASSIFIER_ONOFF_NAME",
     "CLASSIFIER_VERSION",
     "ClassifierVerdict",
     "averaged_spectrum",
     "classify_capture_npz",
+    "classify_difference_npz",
     "classify_spectrum",
     "running_classify",
 ]
 
 CLASSIFIER_NAME = "hline_v1"
 """Classifier name cited by ClassifierResult rows (provenance, plan §12.5)."""
+
+CLASSIFIER_ONOFF_NAME = "hline_v1_onoff"
+"""Provenance name for a classify run on an ON−OFF *difference* spectrum
+(roadmap M10). Distinct from :data:`CLASSIFIER_NAME` so ``ClassifierResult`` rows
+are honest about the method; the classify logic itself is identical."""
 
 CLASSIFIER_VERSION = "1"
 """Classifier version cited by ClassifierResult rows."""
@@ -232,5 +240,75 @@ def classify_capture_npz(
         window_source = "fixed"
     verdict = classify_spectrum(freq_hz, power_db, window_hz=window)
     params = {**verdict.params, "window_source": window_source}
+    json.dumps(params)  # provenance rows serialize params; fail loudly here if not
+    return replace(verdict, params=params)
+
+
+def classify_difference_npz(
+    on_path: str | Path,
+    off_path: str | Path,
+    *,
+    lat_deg: float,
+    lon_deg: float,
+    elevation_m: float,
+    coord: SkyCoord | None = None,
+    when: datetime | None = None,
+    method: str = "ratio",
+) -> ClassifierVerdict:
+    """Classify the ON−OFF *difference* of two ``.npz`` captures end to end.
+
+    Loads both captures' averaged spectra, differences them with
+    :func:`jansky_observe.confirm.onoff.difference_spectrum`, then runs the same
+    peak-in-Doppler-window classify as :func:`classify_capture_npz` on the
+    result — but records the distinct provenance name
+    :data:`CLASSIFIER_ONOFF_NAME`. The difference is already bandpass-flat (the
+    whole point of an OFF), so the classifier's baseline fit becomes a near-no-op
+    residual and the HI line stands alone.
+
+    The Doppler window comes from
+    :func:`~jansky_observe.astro.lsr.doppler_window_hz` when both ``coord`` and
+    ``when`` are given, else the fixed fallback window;
+    ``params["window_source"]`` records which. ``params["method"]`` records the
+    difference method.
+
+    Parameters
+    ----------
+    on_path, off_path : str or Path
+        The ON and OFF ``.npz`` captures.
+    lat_deg, lon_deg, elevation_m : float
+        Station location (geodetic degrees, metres).
+    coord : SkyCoord, optional
+        Pointing direction of the ON capture.
+    when : datetime, optional
+        UTC capture time.
+    method : str
+        Difference method — ``"ratio"`` (default) or ``"subtract"``.
+
+    Returns
+    -------
+    ClassifierVerdict
+        Verdict for the difference spectrum, named :data:`CLASSIFIER_ONOFF_NAME`.
+
+    Raises
+    ------
+    ValueError
+        On an ON/OFF axis mismatch or an unknown ``method`` (from
+        :func:`~jansky_observe.confirm.onoff.difference_spectrum`), or when no
+        channels fall inside the Doppler window (from :func:`classify_spectrum`).
+    """
+    on_freq, on_db = averaged_spectrum(on_path)
+    off_freq, off_db = averaged_spectrum(off_path)
+    freq_hz, diff_db = difference_spectrum(on_freq, on_db, off_freq, off_db, method=method)
+    if coord is not None and when is not None:
+        window = doppler_window_hz(coord, lat_deg, lon_deg, elevation_m, when)
+        window_source = "lsr"
+    else:
+        window = (
+            HI_LINE_FREQ_HZ - FIXED_WINDOW_HALF_WIDTH_HZ,
+            HI_LINE_FREQ_HZ + FIXED_WINDOW_HALF_WIDTH_HZ,
+        )
+        window_source = "fixed"
+    verdict = classify_spectrum(freq_hz, diff_db, window_hz=window, name=CLASSIFIER_ONOFF_NAME)
+    params = {**verdict.params, "window_source": window_source, "method": method}
     json.dumps(params)  # provenance rows serialize params; fail loudly here if not
     return replace(verdict, params=params)

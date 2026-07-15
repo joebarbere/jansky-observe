@@ -22,6 +22,7 @@ from sqlmodel import Session, col, select
 from jansky_observe.capture.hackrf_sweep import rfi_sweep_comparison
 from jansky_observe.models import (
     CAPTURE_KINDS,
+    CAPTURE_POSITIONS,
     Capture,
     ChecklistItemState,
     ChecklistTemplateItem,
@@ -112,6 +113,13 @@ def _detail_context(session: Session, observation: Observation) -> dict[str, Any
         "captures": captures,
         "capture_results": capture_results,
         "capture_kinds": CAPTURE_KINDS,
+        "capture_positions": CAPTURE_POSITIONS,
+        # ON capture id -> paired OFF capture id (drives the difference button).
+        "capture_pairs": {
+            c.pair_capture_id: c.id
+            for c in captures
+            if c.position == "off" and c.pair_capture_id is not None
+        },
         "rfi_comparison": rfi_sweep_comparison(captures),
     }
 
