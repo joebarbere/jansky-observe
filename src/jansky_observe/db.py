@@ -314,6 +314,24 @@ def _migration_12_capture_position(conn: Connection) -> None:
     )
 
 
+def _migration_13_calepoch_tsys(conn: Connection) -> None:
+    """Add the sky/ground Y-factor fields to ``calibration_epoch`` (roadmap M10):
+    ``sky_ground_delta_db`` (band-mean total-power ratio in dB) and ``tsys_k``
+    (the Y-factor system temperature in kelvin), computed and stored when the
+    epoch has both a ``cold_sky`` and a ``hot_ground`` capture.
+
+    Both columns are nullable with no default (``NULL`` = "not yet computed") and
+    neither is indexed — the simplest additive migration (cf. migrations 2/3),
+    guarded on ``PRAGMA table_info`` because migration 1 builds the latest schema
+    (a fresh database already has them, and both paths must land identically).
+    """
+    columns = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(calibration_epoch)")}
+    if "sky_ground_delta_db" not in columns:
+        conn.exec_driver_sql("ALTER TABLE calibration_epoch ADD COLUMN sky_ground_delta_db FLOAT")
+    if "tsys_k" not in columns:
+        conn.exec_driver_sql("ALTER TABLE calibration_epoch ADD COLUMN tsys_k FLOAT")
+
+
 MIGRATIONS: list[tuple[int, Callable[[Connection], None]]] = [
     (1, _migration_1_initial_schema),
     (2, _migration_2_station_stellarium_url),
@@ -327,6 +345,7 @@ MIGRATIONS: list[tuple[int, Callable[[Connection], None]]] = [
     (10, _migration_10_station_uuid),
     (11, _migration_11_station_rotator),
     (12, _migration_12_capture_position),
+    (13, _migration_13_calepoch_tsys),
 ]
 
 

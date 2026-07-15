@@ -6,6 +6,26 @@ milestones**). Work that landed outside a milestone gets a brief summary under t
 that shipped it. Maintained as part of `/release` — a release isn't finished until its
 section exists here.
 
+## v0.11.1 — 2026-07-15 — M10 "Sky/ground Tsys" (part 2 of 2 — completes M10)
+
+Second half of milestone M10 (`plans/m10-onoff-and-skyground.md`): the sky/ground **Y-factor
+reduction** now lives in the app, turning the runbook's "log this ΔdB weekly" into a first-class,
+trendable number. Schema advances to `user_version` **13**. No `install.sh`/`OS_IMAGE` change (no
+QEMU gate); the SDR/capture path and bias-tee invariant are untouched.
+
+- **ΔdB + Tsys on the calibration epoch** (schema `user_version` **13**,
+  `_migration_13_calepoch_tsys`): `CalibrationEpoch.sky_ground_delta_db` + `tsys_k` (both nullable,
+  `None` until computed). A new `confirm/skyground.py::sky_ground_delta(cold_db, hot_db)` computes
+  the Y-factor from an epoch's existing `cold_sky` + `hot_ground` captures (the M7 kinds): band-mean
+  `y = mean(hot_lin)/mean(cold_lin)`, `delta_db = 10·log10(y)`, `tsys_k = (T_hot − y·T_cold)/(y − 1)`
+  with assumed `T_hot = 300 K` / `T_cold = 10 K`; an unphysical `y ≤ 1` (captures swapped) is
+  rejected. `POST /calibration/epochs/{id}/tsys` runs and stores it; the `/calibration` page shows a
+  per-epoch ΔdB/Tsys column + a "Compute Tsys / sky-ground ΔdB" button, and the PDF report's
+  Calibration section renders the values.
+- **MCP**: a read-only `get_calibration_epochs` tool returns the per-epoch Tsys/ΔdB series (for
+  trending via `/compare-observations` and the analyst agent) — MCP surface **22 → 23 tools**, still
+  read-only (the `slew_rotator` exception stands alone).
+
 ## v0.11.0 — 2026-07-14 — M10 "Position switching (ON/OFF)" (part 1 of 2)
 
 First half of milestone M10 (`plans/m10-onoff-and-skyground.md`): the app gains genuine

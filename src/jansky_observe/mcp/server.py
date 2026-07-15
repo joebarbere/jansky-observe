@@ -145,6 +145,17 @@ def build_mcp(app: FastAPI) -> FastMCP:
         return await _get(app, "/api/diagnostics")
 
     @mcp.tool
+    async def get_calibration_epochs() -> list[dict[str, Any]]:
+        """The station's calibration epochs, newest first (roadmap M7/M10): each
+        epoch's id, started_at, notes, its calibration captures grouped by kind
+        (ref_load / cold_sky / hot_ground), whether all three kinds are present,
+        and — once computed from the cold_sky/hot_ground pair — the sky/ground
+        Y-factor system-health numbers sky_ground_delta_db (band-mean ΔdB) and
+        tsys_k (kelvin). Use the series to trend receiver health across weeks
+        (feeds /compare-observations). Read-only."""
+        return await _get(app, "/api/calibration_epochs")
+
+    @mcp.tool
     async def get_capture_meta(capture_id: int) -> dict[str, Any]:
         """One capture's metadata: file path, format, device, size, start/end
         times, full SDR settings, and the linked observation id (if any)."""
