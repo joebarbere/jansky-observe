@@ -6,6 +6,18 @@ milestones**). Work that landed outside a milestone gets a brief summary under t
 that shipped it. Maintained as part of `/release` — a release isn't finished until its
 section exists here.
 
+## v0.10.6 — 2026-07-14 — Waterfall: keep history across a window resize
+
+Follow-up to `v0.10.5` — browser-only, no milestone, no schema change.
+
+- **Resizing the window no longer clears the waterfall** (`static/waterfall.js`): when the pane
+  height changes, the 1:1 history buffer is now carried over — existing rows are copied into the
+  resized buffer **with no vertical rescale**, so every row keeps its exact pixels (verified: the
+  retained rows are pixel-identical across a resize, residual 0 at shift 0). A taller pane adds
+  empty room at the bottom that fills as new data arrives; a shorter one clips the oldest rows.
+  `v0.10.5` rebuilt (blanked) the buffer on resize — but only the *per-frame* scroll ever needed
+  to stay 1:1, so a one-time copy on resize is safe.
+
 ## v0.10.5 — 2026-07-14 — Waterfall: no per-row brightness flicker
 
 Bugfix from live feedback (a screencast) — browser-only, no milestone, no schema change.

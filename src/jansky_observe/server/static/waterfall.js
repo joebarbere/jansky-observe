@@ -189,16 +189,29 @@
   function ensureHistory(nfft, height) {
     height = Math.max(1, height);
     if (off.canvas && off.nfft === nfft && off.height === height) return;
-    // n_fft or canvas height changed → (re)build. History resets; both are rare
-    // (a resize or a stream-parameter change), and a reset is cleaner than a
-    // one-off rescale that would briefly reintroduce the very artifact we removed.
-    off.canvas = document.createElement("canvas");
-    off.canvas.width = nfft;
-    off.canvas.height = height;
-    off.ctx = off.canvas.getContext("2d");
+    const next = document.createElement("canvas");
+    next.width = nfft;
+    next.height = height;
+    const nctx = next.getContext("2d");
+    let rows = 0;
+    if (off.canvas && off.nfft === nfft && off.rows > 0) {
+      // A resize (only the height changed): carry the existing rows over 1:1 — copy
+      // them into the top of the new buffer with NO vertical rescale, so every row
+      // keeps its exact pixels. A taller pane just adds room at the bottom that fills
+      // as new data arrives; a shorter one clips the oldest rows. (A one-time copy is
+      // fine — it's the *per-frame* rescale, not this, that caused the old flicker.)
+      nctx.imageSmoothingEnabled = false;
+      const keep = Math.min(off.height, height, off.rows);
+      nctx.drawImage(off.canvas, 0, 0, nfft, keep, 0, 0, nfft, keep);
+      rows = keep;
+    }
+    // (An n_fft / stream-parameter change can't be carried over, so that path starts
+    // fresh with rows = 0.)
+    off.canvas = next;
+    off.ctx = nctx;
     off.nfft = nfft;
     off.height = height;
-    off.rows = 0;
+    off.rows = rows;
   }
 
   function pushRow(power) {
@@ -417,6 +430,9 @@
         c.height = h;
       }
     }
+    // Carry the waterfall history across the resize (rebuild at the new height, 1:1),
+    // rather than blanking it or drawing it scaled until the next frame.
+    if (off.canvas) ensureHistory(off.nfft, wfCanvas.height);
     drawSpectrum();
     drawWaterfall();
   }
