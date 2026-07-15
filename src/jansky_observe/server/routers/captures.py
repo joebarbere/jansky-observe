@@ -22,11 +22,11 @@ import asyncio
 import json
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 import numpy as np
 from astropy.coordinates import SkyCoord
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from pydantic import BaseModel
 from sqlalchemy import Engine
@@ -36,12 +36,16 @@ from jansky_observe.astro.lsr import vlsr_axis
 from jansky_observe.astro.pointing import sidereal_day_number
 from jansky_observe.confirm.classifier import (
     CLASSIFIER_NAME,
+    CLASSIFIER_ONOFF_NAME,
     averaged_spectrum,
     classify_capture_npz,
+    classify_difference_npz,
 )
+from jansky_observe.confirm.onoff import difference_spectrum
 from jansky_observe.confirm.plots import verdict_plot
 from jansky_observe.control import ctl_request
 from jansky_observe.models import (
+    CAPTURE_POSITIONS,
     CalibrationEpoch,
     Campaign,
     Capture,
@@ -359,6 +363,127 @@ def _capture_results(session: Session, capture_id: int) -> list[ClassifierResult
     return list(rows)
 
 
+# ---- ON/OFF position switching + difference (roadmap M10) --------------------------
+
+
+def _difference_plot_path(data_dir: str, capture_id: int) -> Path:
+    """Where the ON−OFF difference verdict plot for an ON capture is rendered
+    (distinct from the single-capture :func:`_plot_path`)."""
+    return Path(data_dir) / "plots" / f"capture-{capture_id}-{CLASSIFIER_ONOFF_NAME}.png"
+
+
+def _paired_off_id(session: Session, on_capture: Capture) -> int | None:
+    """The id of the OFF capture paired to this ON (``pair_capture_id == on.id``),
+    or ``None`` — drives the "Classify difference" button in the detail page."""
+    if on_capture.id is None:
+        return None
+    off = session.exec(
+        select(Capture)
+        .where(Capture.pair_capture_id == on_capture.id)
+        .where(Capture.position == "off")
+        .order_by(col(Capture.id))
+    ).first()
+    return None if off is None else off.id
+
+
+def _resolve_off(session: Session, on_capture: Capture, ref: int | None) -> Capture:
+    """The OFF capture to difference against: ``ref`` when given, else inferred
+    from the OFF whose ``pair_capture_id`` points at this ON.
+
+    Validates the OFF exists, is an ``"off"`` position, and shares the ON's
+    observation — 422 otherwise (a bad or mismatched reference)."""
+    if ref is None:
+        off = session.exec(
+            select(Capture)
+            .where(Capture.pair_capture_id == on_capture.id)
+            .where(Capture.position == "off")
+            .order_by(col(Capture.id))
+        ).first()
+        if off is None:
+            raise HTTPException(
+                status_code=422,
+                detail="no paired OFF capture — pass ?ref=<off_id> or pair one on the detail page",
+            )
+    else:
+        off = session.get(Capture, ref)
+        if off is None:
+            raise HTTPException(status_code=422, detail=f"reference capture {ref} not found")
+    if off.position != "off":
+        raise HTTPException(
+            status_code=422, detail=f"reference capture {off.id} is not an OFF position"
+        )
+    if off.observation_id != on_capture.observation_id:
+        raise HTTPException(
+            status_code=422,
+            detail="ON and OFF captures belong to different observations",
+        )
+    return off
+
+
+def _difference(
+    session: Session, on_capture: Capture, off_capture: Capture, method: str
+) -> tuple[np.ndarray, np.ndarray]:
+    """The ON−OFF difference spectrum; 404 if a file is missing, 422 on mismatch."""
+    on_freq, on_db = _averaged(on_capture)
+    off_freq, off_db = _averaged(off_capture)
+    try:
+        return difference_spectrum(on_freq, on_db, off_freq, off_db, method=method)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
+
+
+def _classify_difference(
+    session: Session, on_capture: Capture, off_capture: Capture, method: str, data_dir: str
+) -> tuple[ClassifierResult, Path]:
+    """Classify the ON−OFF difference: append a ``hline_v1_onoff`` result row
+    (with ``ref_capture_id`` + ``method`` in params) and render its plot."""
+    pointing = _pointing_context(session, on_capture)
+    try:
+        if pointing is not None:
+            coord, location, when = pointing
+            verdict = classify_difference_npz(
+                on_capture.path,
+                off_capture.path,
+                lat_deg=location.lat_deg,
+                lon_deg=location.lon_deg,
+                elevation_m=location.elevation_m,
+                coord=coord,
+                when=when,
+                method=method,
+            )
+        else:
+            verdict = classify_difference_npz(
+                on_capture.path,
+                off_capture.path,
+                lat_deg=0.0,
+                lon_deg=0.0,
+                elevation_m=0.0,
+                method=method,
+            )
+    except FileNotFoundError:
+        raise HTTPException(
+            status_code=404, detail=f"capture file missing: {on_capture.path} / {off_capture.path}"
+        ) from None
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
+    assert on_capture.id is not None  # fetched by primary key
+    result = ClassifierResult(
+        capture_id=on_capture.id,
+        name=verdict.name,
+        version=verdict.version,
+        verdict=verdict.verdict,
+        score=verdict.score,
+        params={**verdict.params, "ref_capture_id": off_capture.id},
+        mode="post",
+    )
+    session.add(result)
+    session.commit()
+    session.refresh(result)
+    freq_hz, diff_db = _difference(session, on_capture, off_capture, method)
+    plot = verdict_plot(freq_hz, diff_db, verdict, _difference_plot_path(data_dir, on_capture.id))
+    return result, plot
+
+
 # ---- JSON API ---------------------------------------------------------------------
 
 
@@ -454,6 +579,47 @@ def capture_purge(session: SessionDep, capture_id: int) -> RedirectResponse:
     return RedirectResponse("/observations", status_code=303)
 
 
+@router.post("/captures/{capture_id}/position")
+def set_capture_position(
+    session: SessionDep,
+    capture_id: int,
+    position: Annotated[str, Form()],
+    pair_capture_id: Annotated[str, Form()] = "",
+) -> RedirectResponse:
+    """Set a capture's ON/OFF position role (roadmap M10). HTML-only.
+
+    ``position`` is ``"on"`` or ``"off"`` (422 otherwise). Setting ``"off"``
+    optionally pairs it with an ON capture via the submitted ``pair_capture_id``
+    — validated to be an ``"on"`` capture in the *same* observation (422
+    otherwise); an empty field clears the pairing. Setting ``"on"`` always clears
+    the pairing. Redirects back to the observation."""
+    if position not in CAPTURE_POSITIONS:
+        raise HTTPException(status_code=422, detail=f"unknown capture position {position!r}")
+    capture = get_or_404(session, Capture, capture_id)
+    if position == "off":
+        pair_id = pair_capture_id.strip()
+        if pair_id:
+            pair = session.get(Capture, int(pair_id))
+            if pair is None or pair.position != "on":
+                raise HTTPException(
+                    status_code=422, detail=f"pair capture {pair_id} is not an ON capture"
+                )
+            if pair.observation_id != capture.observation_id:
+                raise HTTPException(
+                    status_code=422, detail="pair capture is in a different observation"
+                )
+            capture.pair_capture_id = pair.id
+        else:
+            capture.pair_capture_id = None
+    else:  # on: an ON capture never references a pair
+        capture.pair_capture_id = None
+    capture.position = position
+    session.add(capture)
+    session.commit()
+    dest = f"/observations/{capture.observation_id}" if capture.observation_id else "/observations"
+    return RedirectResponse(dest, status_code=303)
+
+
 @router.get("/api/captures/{capture_id}/spectrum")
 def api_capture_spectrum(
     session: SessionDep, capture_id: int, axis: Literal["mhz", "vlsr"] = "mhz"
@@ -479,6 +645,78 @@ def api_capture_spectrum(
         freq_hz, coord, location.lat_deg, location.lon_deg, location.elevation_m, when
     )
     return {"axis": velocity.tolist(), "power_db": power_db.tolist(), "axis_kind": "vlsr"}
+
+
+@router.get("/api/captures/{capture_id}/difference")
+def api_capture_difference(
+    session: SessionDep,
+    capture_id: int,
+    ref: int | None = None,
+    axis: Literal["mhz", "vlsr"] = "mhz",
+    method: Literal["ratio", "subtract"] = "ratio",
+) -> dict[str, Any]:
+    """The ON−OFF difference spectrum of an ON capture, same shape as
+    ``/spectrum`` (roadmap M10).
+
+    ``ref`` is the OFF capture id; omit it to infer the OFF paired to this ON.
+    404 if either file is purged/missing; 422 on an axis mismatch or a ``ref``
+    that is not a valid OFF for this observation; ``axis=vlsr`` needs a linked
+    observation (409 otherwise, like ``/spectrum``).
+    """
+    on_capture = get_or_404(session, Capture, capture_id)
+    _require_npz(on_capture)
+    off_capture = _resolve_off(session, on_capture, ref)
+    _require_npz(off_capture)
+    freq_hz, diff_db = _difference(session, on_capture, off_capture, method)
+    if axis == "mhz":
+        return {
+            "axis": (freq_hz / 1e6).tolist(),
+            "power_db": diff_db.tolist(),
+            "axis_kind": "mhz",
+            "ref_capture_id": off_capture.id,
+        }
+    pointing = _pointing_context(session, on_capture)
+    if pointing is None:
+        raise HTTPException(
+            status_code=409,
+            detail="v_LSR axis needs a linked observation (pointing + location + time)",
+        )
+    coord, location, when = pointing
+    velocity = vlsr_axis(
+        freq_hz, coord, location.lat_deg, location.lon_deg, location.elevation_m, when
+    )
+    return {
+        "axis": velocity.tolist(),
+        "power_db": diff_db.tolist(),
+        "axis_kind": "vlsr",
+        "ref_capture_id": off_capture.id,
+    }
+
+
+@router.post("/api/captures/{capture_id}/classify_difference")
+def api_capture_classify_difference(
+    request: Request,
+    session: SessionDep,
+    capture_id: int,
+    ref: int | None = None,
+    method: Literal["ratio", "subtract"] = "ratio",
+) -> dict[str, Any]:
+    """Classify the ON−OFF difference of an ON capture (roadmap M10).
+
+    Resolves the OFF from ``ref`` (or the pairing), runs the difference +
+    ``hline_v1_onoff`` classify, appends a :class:`ClassifierResult` (params
+    carry ``ref_capture_id`` + ``method`` alongside the peak/SNR fields), and
+    renders the difference verdict plot. 422 on a bad ``ref`` or axis mismatch;
+    404 if a file is missing.
+    """
+    on_capture = get_or_404(session, Capture, capture_id)
+    _require_npz(on_capture)
+    off_capture = _resolve_off(session, on_capture, ref)
+    _require_npz(off_capture)
+    result, plot = _classify_difference(
+        session, on_capture, off_capture, method, request.app.state.settings.data_dir
+    )
+    return {**result.model_dump(), "plot_path": str(plot)}
 
 
 @router.post("/api/captures/{capture_id}/classify")
@@ -513,6 +751,21 @@ def api_capture_plot(request: Request, session: SessionDep, capture_id: int) -> 
     return FileResponse(path, media_type="image/png")
 
 
+@router.get("/api/captures/{capture_id}/difference_plot")
+def api_capture_difference_plot(
+    request: Request, session: SessionDep, capture_id: int
+) -> FileResponse:
+    """The rendered ON−OFF difference verdict plot PNG; 404 until a
+    classify-difference run renders one."""
+    get_or_404(session, Capture, capture_id)
+    path = _difference_plot_path(request.app.state.settings.data_dir, capture_id)
+    if not path.is_file():
+        raise HTTPException(
+            status_code=404, detail="no difference verdict plot rendered for this capture yet"
+        )
+    return FileResponse(path, media_type="image/png")
+
+
 # ---- htmx fragment (observation detail page) ---------------------------------------
 
 
@@ -527,5 +780,38 @@ def capture_classify_fragment(
     return TEMPLATES.TemplateResponse(
         request,
         "_capture_results.html",
-        {"capture": capture, "results": _capture_results(session, capture_id)},
+        {
+            "capture": capture,
+            "results": _capture_results(session, capture_id),
+            "pair_off_id": _paired_off_id(session, capture),
+        },
+    )
+
+
+@router.post("/captures/{capture_id}/classify_difference", response_class=HTMLResponse)
+def capture_classify_difference_fragment(
+    request: Request,
+    session: SessionDep,
+    capture_id: int,
+    ref: Annotated[int | None, Form()] = None,
+    method: Annotated[str, Form()] = "ratio",
+) -> HTMLResponse:
+    """Classify the ON−OFF difference (htmx) and re-render the ON capture's
+    confirmation cell, with the ``hline_v1_onoff`` verdict alongside any
+    single-capture ones."""
+    on_capture = get_or_404(session, Capture, capture_id)
+    _require_npz(on_capture)
+    off_capture = _resolve_off(session, on_capture, ref)
+    _require_npz(off_capture)
+    _classify_difference(
+        session, on_capture, off_capture, method, request.app.state.settings.data_dir
+    )
+    return TEMPLATES.TemplateResponse(
+        request,
+        "_capture_results.html",
+        {
+            "capture": on_capture,
+            "results": _capture_results(session, capture_id),
+            "pair_off_id": off_capture.id,
+        },
     )

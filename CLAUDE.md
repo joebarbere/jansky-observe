@@ -110,7 +110,13 @@ streaming npz writes, a cached Welch window), and the browser-only cockpit polis
 an exact total-power readout), **`v0.10.5`** (waterfall rendered at 1:1 vertical resolution
 so a row keeps its brightness as it scrolls — the per-row flicker fix), and **`v0.10.6`** (that
 waterfall history now survives a window resize, rows preserved 1:1), none changing the schema or
-milestone status.
+milestone status. **M10 (`v0.11.0`) is the first milestone past M9** — ON/OFF position switching:
+`Capture.position` (on/off) + `pair_capture_id` (schema `user_version` **12**,
+`_migration_12_capture_position`), an ON−OFF `difference_spectrum` (`confirm/onoff.py`, ratio
+divides out the bandpass) classified under a distinct `hline_v1_onoff` provenance name via the
+existing `classify_spectrum`. Read-and-reduce only (SDR/capture path + bias-tee untouched; no new
+MCP verb, still 22 tools). Spec: `plans/m10-onoff-and-skyground.md`. The sky/ground Tsys half
+(M10 Piece 3) follows as `v0.11.1`.
 This all sits on top of M8 research-bridge/guides
 (`v0.9.1`), M7 calibration/scheduling, the M6 cockpit, and the `v0.6.x` feature-complete base:
 capture (synthetic + real Airspy), observation records + wizard + observing ladder, the hline_v1

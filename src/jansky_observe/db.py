@@ -289,6 +289,31 @@ def _migration_11_station_rotator(conn: Connection) -> None:
             conn.exec_driver_sql(f"ALTER TABLE station ADD COLUMN {name} {ddl}")
 
 
+def _migration_12_capture_position(conn: Connection) -> None:
+    """Add ON/OFF position switching to ``capture`` (roadmap M10): ``position``
+    (``"on"`` default / ``"off"``) and ``pair_capture_id`` (the ON a given OFF
+    references, for ON−OFF differencing).
+
+    Both columns are guarded on ``PRAGMA table_info`` (migration 1 builds the
+    latest schema, so a fresh database already has them). ``pair_capture_id``
+    is indexed in the models, but SQLite forbids an indexed column in
+    ``ADD COLUMN``, so — like migrations 10/11 — the index is created separately
+    (``IF NOT EXISTS``); both paths land on the same schema. Existing capture
+    rows default to ``position = 'on'`` (unpaired), leaving every single-pointing
+    capture unaffected.
+    """
+    columns = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(capture)")}
+    if "position" not in columns:
+        conn.exec_driver_sql(
+            "ALTER TABLE capture ADD COLUMN position VARCHAR NOT NULL DEFAULT 'on'"
+        )
+    if "pair_capture_id" not in columns:
+        conn.exec_driver_sql("ALTER TABLE capture ADD COLUMN pair_capture_id INTEGER")
+    conn.exec_driver_sql(
+        "CREATE INDEX IF NOT EXISTS ix_capture_pair_capture_id ON capture (pair_capture_id)"
+    )
+
+
 MIGRATIONS: list[tuple[int, Callable[[Connection], None]]] = [
     (1, _migration_1_initial_schema),
     (2, _migration_2_station_stellarium_url),
@@ -301,6 +326,7 @@ MIGRATIONS: list[tuple[int, Callable[[Connection], None]]] = [
     (9, _migration_9_schedule),
     (10, _migration_10_station_uuid),
     (11, _migration_11_station_rotator),
+    (12, _migration_12_capture_position),
 ]
 
 

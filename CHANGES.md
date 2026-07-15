@@ -6,6 +6,33 @@ milestones**). Work that landed outside a milestone gets a brief summary under t
 that shipped it. Maintained as part of `/release` — a release isn't finished until its
 section exists here.
 
+## v0.11.0 — 2026-07-14 — M10 "Position switching (ON/OFF)" (part 1 of 2)
+
+First half of milestone M10 (`plans/m10-onoff-and-skyground.md`): the app gains genuine
+**ON/OFF position switching** — recording an OFF (blank-sky) reference alongside an ON pointing
+and confirming HI from their difference — alongside the existing single-capture baseline-fit
+classifier. Schema advances to `user_version` **12**. No `install.sh`/`OS_IMAGE` change (so no
+QEMU gate). Read-and-reduce only: the SDR/capture path and the bias-tee invariant are untouched,
+and no new mutating MCP verb (MCP stays 22 tools). The sky/ground Tsys reduction (M10 Piece 3)
+follows in `v0.11.1`.
+
+- **Capture position + pairing** (schema `user_version` **12**, `_migration_12_capture_position`):
+  `Capture.position` (`"on"` default / `"off"`) — *orthogonal* to the M7 calibration `kind`
+  (an ON or OFF pointing is still a `science` capture) — plus `Capture.pair_capture_id`, the ON a
+  given OFF references. Tagged from the observation detail page (an on/off select, and a pair
+  select of the observation's ON captures when a row is OFF) via `POST /captures/{id}/position` —
+  HTML-only, like the M7 `kind` dropdown.
+- **ON−OFF difference + classify-on-difference** (`confirm/onoff.py`,
+  `confirm/classifier.py::classify_difference_npz`): `difference_spectrum(...)` divides the ON by
+  the OFF in linear power (`method="ratio"`, the standard position-switch — cancels the receiver
+  bandpass; `"subtract"` available), yielding a flat spectrum with the HI line as the only bump.
+  It feeds the *existing* `classify_spectrum` (same baseline-fit + peak-in-Doppler-window + SNR),
+  recorded under a distinct provenance name **`hline_v1_onoff`** with `ref_capture_id` + `method`
+  in `params` (the single-capture `hline_v1` is untouched). Served at
+  `GET /api/captures/{on_id}/difference` (MHz/v_LSR axis, OFF inferred from the pairing or `?ref=`)
+  and `POST /api/captures/{on_id}/classify_difference`; the observation detail page shows a
+  "Classify difference (ON−OFF)" action + verdict beside the single-capture one.
+
 ## v0.10.6 — 2026-07-14 — Waterfall: keep history across a window resize
 
 Follow-up to `v0.10.5` — browser-only, no milestone, no schema change.

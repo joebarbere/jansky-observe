@@ -21,6 +21,7 @@ from sqlmodel import Field, SQLModel
 __all__ = [
     "CALIBRATION_KINDS",
     "CAPTURE_KINDS",
+    "CAPTURE_POSITIONS",
     "ROTATOR_KINDS",
     "CalibrationEpoch",
     "Campaign",
@@ -295,6 +296,11 @@ class ChecklistItemState(SQLModel, table=True):
 CAPTURE_KINDS: tuple[str, ...] = ("science", "ref_load", "cold_sky", "hot_ground")
 #: The calibration kinds (everything but ``science``).
 CALIBRATION_KINDS: tuple[str, ...] = ("ref_load", "cold_sky", "hot_ground")
+#: Position-switch roles (roadmap M10). ``"on"`` (the default) points at the
+#: source; ``"off"`` is a nearby blank-sky reference for ON−OFF differencing.
+#: Orthogonal to :data:`CAPTURE_KINDS` — an ON or OFF pointing is still a
+#: ``science`` capture.
+CAPTURE_POSITIONS: tuple[str, ...] = ("on", "off")
 
 
 class CalibrationEpoch(SQLModel, table=True):
@@ -371,6 +377,12 @@ class Capture(SQLModel, table=True):
     #: ``sidereal_day_number``) — the drift-scan pass tag; captures on different
     #: sidereal days at the same LST stack. ``None`` outside a campaign.
     sidereal_day: int | None = None
+    #: Position-switch role (roadmap M10): ``"on"`` (default, points at the
+    #: source) or ``"off"`` (a blank-sky reference). See :data:`CAPTURE_POSITIONS`.
+    position: str = "on"
+    #: On an ``"off"`` capture, the ``"on"`` :class:`Capture` it references for
+    #: ON−OFF differencing (same observation); ``None`` on unpaired captures.
+    pair_capture_id: int | None = Field(default=None, foreign_key="capture.id", index=True)
     created_at: datetime = Field(default_factory=utcnow)
 
 

@@ -262,6 +262,7 @@ def test_migration_6_7_upgrade_from_version_5_keeps_data(tmp_path: Path) -> None
             apply(conn)
             conn.exec_driver_sql(f"PRAGMA user_version = {version}")
         conn.exec_driver_sql("ALTER TABLE capture DROP COLUMN kind")
+        conn.exec_driver_sql("ALTER TABLE capture DROP COLUMN position")  # pre-M10
         conn.exec_driver_sql("DELETE FROM observation_type WHERE name = 'Calibration sweep'")
         conn.exec_driver_sql(
             "INSERT INTO capture (device, path, format, size_bytes, created_at) "
@@ -303,6 +304,7 @@ def test_migration_8_upgrade_from_version_7_keeps_data(tmp_path: Path) -> None:
             apply(conn)
             conn.exec_driver_sql(f"PRAGMA user_version = {version}")
         conn.exec_driver_sql("ALTER TABLE capture DROP COLUMN sidereal_day")
+        conn.exec_driver_sql("ALTER TABLE capture DROP COLUMN position")  # pre-M10
         conn.exec_driver_sql(
             "INSERT INTO capture (device, path, format, size_bytes, kind, created_at) "
             "VALUES ('airspy', '/x/old.npz', 'npz_spectra', 5, 'science', '2026-07-01T00:00:00')"
@@ -435,6 +437,58 @@ def test_migration_11_upgrade_from_version_10_keeps_data(tmp_path: Path) -> None
         assert station.rotator_kind == "none"  # existing station defaults to manual
         assert station.az_max_deg == 360.0 and station.el_max_deg == 90.0
         assert station.park_el_deg == 90.0
+
+    db.migrate(engine)  # re-run is a no-op
+    assert _user_version(engine) == max(version for version, _ in db.MIGRATIONS)
+
+
+def test_migration_12_fresh_db_has_position_columns(tmp_path: Path) -> None:
+    from jansky_observe.models import Capture
+
+    engine = db.init_db(tmp_path / "data")
+    assert _user_version(engine) == max(version for version, _ in db.MIGRATIONS)
+    caps = {c["name"] for c in inspect(engine).get_columns("capture")}
+    assert {"position", "pair_capture_id"} <= caps
+    # The pair_capture_id index rode in (created separately, like migrations 10/11).
+    index_names = {ix["name"] for ix in inspect(engine).get_indexes("capture")}
+    assert "ix_capture_pair_capture_id" in index_names
+    with db.session(engine) as s:
+        capture = Capture(device="synthetic", path="/x/a.npz", format="npz_spectra")
+        s.add(capture)
+        s.commit()
+        s.refresh(capture)
+        assert capture.position == "on"  # default
+        assert capture.pair_capture_id is None
+
+
+def test_migration_12_upgrade_from_version_11_keeps_data(tmp_path: Path) -> None:
+    from jansky_observe.models import Capture
+
+    # Simulate a pre-M10 database: run migrations 1..11, drop the FK-free
+    # ``position`` column (SQLite can't DROP the indexed self-FK
+    # ``pair_capture_id``; migration 12 guards it and is idempotent — the
+    # fresh-DB test + the re-run below cover it), then migrate forward.
+    engine = db.get_engine(tmp_path / "data")
+    with engine.begin() as conn:
+        for version, apply in db.MIGRATIONS[:11]:  # migrations 1..11
+            apply(conn)
+            conn.exec_driver_sql(f"PRAGMA user_version = {version}")
+        conn.exec_driver_sql("ALTER TABLE capture DROP COLUMN position")
+        conn.exec_driver_sql(
+            "INSERT INTO capture (device, path, format, size_bytes, kind, created_at) "
+            "VALUES ('airspy', '/x/old.npz', 'npz_spectra', 7, 'science', '2026-07-01T00:00:00')"
+        )
+    assert _user_version(engine) == 11
+    assert "position" not in {c["name"] for c in inspect(engine).get_columns("capture")}
+
+    db.migrate(engine)
+    assert _user_version(engine) == max(version for version, _ in db.MIGRATIONS)
+    caps = {c["name"] for c in inspect(engine).get_columns("capture")}
+    assert {"position", "pair_capture_id"} <= caps
+    with db.session(engine) as s:
+        old = s.exec(select(Capture).where(Capture.path == "/x/old.npz")).one()
+        assert old.position == "on"  # existing row got the default
+        assert old.pair_capture_id is None
 
     db.migrate(engine)  # re-run is a no-op
     assert _user_version(engine) == max(version for version, _ in db.MIGRATIONS)
