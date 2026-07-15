@@ -102,14 +102,15 @@ nothing by design.
 ## Current status
 
 M0–M9 have all shipped — **`v0.10.0` (M9 "Rotator — Discovery Drive") is released and live on
-the Pi** (schema `user_version` 11, 22 MCP tools). Five between-milestones patches followed:
+the Pi** (schema `user_version` 11, 22 MCP tools). Six between-milestones patches followed:
 **`v0.10.1`** (an Argon ONE V5 M.2 NVMe case-setup installer switch, `--install-argon`),
 **`v0.10.2`** (a capture/DSP/SQLite performance pass — bounded-copy Airspy reads, SQLite WAL,
 streaming npz writes, a cached Welch window), and the browser-only cockpit polish **`v0.10.3`**
 (a live total-power strip + a first waterfall flicker fix), **`v0.10.4`** (steady waterfall +
-an exact total-power readout), and **`v0.10.5`** (waterfall rendered at 1:1 vertical resolution
-so a row keeps its brightness as it scrolls — the per-row flicker fix), none changing the schema
-or milestone status.
+an exact total-power readout), **`v0.10.5`** (waterfall rendered at 1:1 vertical resolution
+so a row keeps its brightness as it scrolls — the per-row flicker fix), and **`v0.10.6`** (that
+waterfall history now survives a window resize, rows preserved 1:1), none changing the schema or
+milestone status.
 This all sits on top of M8 research-bridge/guides
 (`v0.9.1`), M7 calibration/scheduling, the M6 cockpit, and the `v0.6.x` feature-complete base:
 capture (synthetic + real Airspy), observation records + wizard + observing ladder, the hline_v1
