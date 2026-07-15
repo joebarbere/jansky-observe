@@ -37,6 +37,22 @@
     </tr>
     {% endfor %}
   </table>
+  <table class="list">
+    <tr><th>sky/ground ΔdB</th><th>Tsys</th><th></th></tr>
+    <tr>
+      <td>{% if r.epoch.sky_ground_delta_db is not none %}{{ "%.2f"|format(r.epoch.sky_ground_delta_db) }}&nbsp;dB{% else %}<span class="muted">—</span>{% endif %}</td>
+      <td>{% if r.epoch.tsys_k is not none %}{{ "%.0f"|format(r.epoch.tsys_k) }}&nbsp;K{% else %}<span class="muted">—</span>{% endif %}</td>
+      <td>
+        <form method="post" action="/calibration/epochs/{{ r.epoch.id }}/tsys">
+          <button class="btn" type="submit">Compute Tsys / sky-ground ΔdB</button>
+        </form>
+      </td>
+    </tr>
+  </table>
+  <p class="muted">
+    Y-factor from this epoch's <b>cold sky</b> and <b>hot ground</b> captures,
+    assuming ground&nbsp;≈&nbsp;300&nbsp;K and cold sky&nbsp;≈&nbsp;10&nbsp;K.
+  </p>
 </section>
 {% endfor %}
 {% else %}

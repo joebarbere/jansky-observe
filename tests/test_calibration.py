@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
+import numpy as np
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import Engine
@@ -149,3 +152,103 @@ def test_epoch_complete_when_all_three_kinds_present(client: TestClient, engine:
         cap = _add_capture(engine)
         client.post(f"/captures/{cap}/kind", data={"kind": kind})
     assert client.get("/api/calibration_epochs").json()[0]["complete"] is True
+
+
+# --- sky/ground Tsys reduction (roadmap M10) -------------------------------
+
+CENTER_HZ, RATE_HZ, N_FFT = 1420.4e6, 3e6, 256
+
+
+def _write_flat_npz(path: Path, level_db: float) -> None:
+    """A minimal .npz capture: a flat power_db spectrum (8 frames × N_FFT)."""
+    np.savez(
+        path,
+        power_db=np.full((8, N_FFT), level_db, dtype=np.float64),
+        center_freq_hz=CENTER_HZ,
+        sample_rate_hz=RATE_HZ,
+    )
+
+
+def _cal_capture(engine: Engine, *, kind: str, epoch_id: int, path: str) -> int:
+    with Session(engine) as session:
+        capture = Capture(
+            device="synthetic",
+            path=path,
+            format="npz_spectra",
+            size_bytes=1,
+            kind=kind,
+            cal_epoch_id=epoch_id,
+        )
+        session.add(capture)
+        session.commit()
+        session.refresh(capture)
+        assert capture.id is not None
+        return capture.id
+
+
+def test_compute_tsys_stores_and_shows_values(
+    client: TestClient, engine: Engine, tmp_path: Path
+) -> None:
+    client.post("/calibration/epochs", data={"notes": "sky/ground"})
+    epoch_id = client.get("/api/calibration_epochs").json()[0]["id"]
+    cold = tmp_path / "cold.npz"
+    hot = tmp_path / "hot.npz"
+    _write_flat_npz(cold, 0.0)  # linear 1.0
+    _write_flat_npz(hot, 10.0 * np.log10(2.0))  # linear 2.0 → Y = 2
+    _cal_capture(engine, kind="cold_sky", epoch_id=epoch_id, path=str(cold))
+    _cal_capture(engine, kind="hot_ground", epoch_id=epoch_id, path=str(hot))
+
+    resp = client.post(f"/calibration/epochs/{epoch_id}/tsys", follow_redirects=False)
+    assert resp.status_code == 303
+
+    epoch = client.get("/api/calibration_epochs").json()[0]
+    assert epoch["sky_ground_delta_db"] == pytest.approx(10.0 * np.log10(2.0), abs=1e-3)
+    assert epoch["tsys_k"] == pytest.approx(280.0)  # (300 − 2·10)/(2 − 1)
+    # The calibration page renders the computed numbers.
+    page = client.get("/calibration").text
+    assert "280" in page and "3.01" in page
+
+
+def test_compute_tsys_missing_kind_is_422(
+    client: TestClient, engine: Engine, tmp_path: Path
+) -> None:
+    client.post("/calibration/epochs", data={"notes": "cold only"})
+    epoch_id = client.get("/api/calibration_epochs").json()[0]["id"]
+    cold = tmp_path / "cold.npz"
+    _write_flat_npz(cold, 0.0)
+    _cal_capture(engine, kind="cold_sky", epoch_id=epoch_id, path=str(cold))
+
+    resp = client.post(f"/calibration/epochs/{epoch_id}/tsys", follow_redirects=False)
+    assert resp.status_code == 422
+    assert "hot_ground" in resp.json()["detail"]
+
+
+def test_compute_tsys_missing_file_is_422(
+    client: TestClient, engine: Engine, tmp_path: Path
+) -> None:
+    client.post("/calibration/epochs", data={"notes": "purged"})
+    epoch_id = client.get("/api/calibration_epochs").json()[0]["id"]
+    cold = tmp_path / "cold.npz"
+    _write_flat_npz(cold, 0.0)
+    _cal_capture(engine, kind="cold_sky", epoch_id=epoch_id, path=str(cold))
+    _cal_capture(engine, kind="hot_ground", epoch_id=epoch_id, path=str(tmp_path / "gone.npz"))
+
+    resp = client.post(f"/calibration/epochs/{epoch_id}/tsys", follow_redirects=False)
+    assert resp.status_code == 422
+
+
+def test_compute_tsys_unphysical_pair_is_422(
+    client: TestClient, engine: Engine, tmp_path: Path
+) -> None:
+    client.post("/calibration/epochs", data={"notes": "swapped"})
+    epoch_id = client.get("/api/calibration_epochs").json()[0]["id"]
+    cold = tmp_path / "cold.npz"
+    hot = tmp_path / "hot.npz"
+    _write_flat_npz(cold, 6.0)  # cold hotter than hot → Y < 1
+    _write_flat_npz(hot, 0.0)
+    _cal_capture(engine, kind="cold_sky", epoch_id=epoch_id, path=str(cold))
+    _cal_capture(engine, kind="hot_ground", epoch_id=epoch_id, path=str(hot))
+
+    resp = client.post(f"/calibration/epochs/{epoch_id}/tsys", follow_redirects=False)
+    assert resp.status_code == 422
+    assert "unphysical" in resp.json()["detail"]

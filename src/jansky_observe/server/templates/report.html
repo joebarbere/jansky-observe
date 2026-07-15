@@ -176,6 +176,20 @@
   <p>Captures in this session reference calibration epoch(s):
     {% for e in cal_epochs %}#{{ e.id }} ({{ e.started_at | dt }}){% if not loop.last %}, {% endif %}{% endfor %}.
     Science captures are stamped with the epoch in effect when they ran (plans 78/79).</p>
+  {% set health = cal_epochs | selectattr("tsys_k", "ne", None) | list %}
+  {% if health %}
+  <table>
+    <tr><th>epoch</th><th>sky/ground ΔdB</th><th>Tsys</th></tr>
+    {% for e in health %}
+    <tr>
+      <td>#{{ e.id }}</td>
+      <td>{% if e.sky_ground_delta_db is not none %}{{ "%.2f"|format(e.sky_ground_delta_db) }} dB{% else %}—{% endif %}</td>
+      <td>{{ "%.0f"|format(e.tsys_k) }} K</td>
+    </tr>
+    {% endfor %}
+  </table>
+  <p>Y-factor sky/ground system-health (ground ≈ 300 K, cold sky ≈ 10 K).</p>
+  {% endif %}
 </section>
 {% endif %}
 

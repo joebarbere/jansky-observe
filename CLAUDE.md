@@ -115,8 +115,10 @@ milestone status. **M10 (`v0.11.0`) is the first milestone past M9** — ON/OFF 
 `_migration_12_capture_position`), an ON−OFF `difference_spectrum` (`confirm/onoff.py`, ratio
 divides out the bandpass) classified under a distinct `hline_v1_onoff` provenance name via the
 existing `classify_spectrum`. Read-and-reduce only (SDR/capture path + bias-tee untouched; no new
-MCP verb, still 22 tools). Spec: `plans/m10-onoff-and-skyground.md`. The sky/ground Tsys half
-(M10 Piece 3) follows as `v0.11.1`.
+MCP verb). Spec: `plans/m10-onoff-and-skyground.md`. The sky/ground Y-factor half shipped as
+**`v0.11.1`** (`CalibrationEpoch.sky_ground_delta_db`/`tsys_k`, migration 13, `confirm/skyground.py`
+computing the ΔdB/Tsys from an epoch's `cold_sky`+`hot_ground` captures, a read-only
+`get_calibration_epochs` MCP tool → **23 tools**) — **M10 is complete.**
 This all sits on top of M8 research-bridge/guides
 (`v0.9.1`), M7 calibration/scheduling, the M6 cockpit, and the `v0.6.x` feature-complete base:
 capture (synthetic + real Airspy), observation records + wizard + observing ladder, the hline_v1

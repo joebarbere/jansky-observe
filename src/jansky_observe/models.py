@@ -316,6 +316,15 @@ class CalibrationEpoch(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     started_at: datetime = Field(default_factory=utcnow)
     notes: str = ""
+    #: Band-mean sky/ground total-power ratio in dB (roadmap M10), computed from
+    #: this epoch's ``cold_sky`` and ``hot_ground`` captures by the Y-factor
+    #: reduction (:func:`jansky_observe.confirm.skyground.sky_ground_delta`).
+    #: ``None`` until computed — the runbook's trendable system-health number.
+    sky_ground_delta_db: float | None = None
+    #: Y-factor system temperature in kelvin (roadmap M10), computed alongside
+    #: ``sky_ground_delta_db`` with the assumed ground/cold-sky temperatures
+    #: (300 K / 10 K). ``None`` until computed.
+    tsys_k: float | None = None
     created_at: datetime = Field(default_factory=utcnow)
 
 

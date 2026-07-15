@@ -86,6 +86,7 @@ def test_tool_surface_has_no_forbidden_verbs(tmp_path):
         "build_report",
         "create_observation_draft",
         "export_capture",
+        "get_calibration_epochs",
         "get_capture_meta",
         "get_diagnostics",
         "get_hi_badge",

@@ -494,6 +494,54 @@ def test_migration_12_upgrade_from_version_11_keeps_data(tmp_path: Path) -> None
     assert _user_version(engine) == max(version for version, _ in db.MIGRATIONS)
 
 
+def test_migration_13_fresh_db_has_calepoch_tsys_columns(tmp_path: Path) -> None:
+    from jansky_observe.models import CalibrationEpoch
+
+    engine = db.init_db(tmp_path / "data")
+    assert _user_version(engine) == max(version for version, _ in db.MIGRATIONS)
+    cols = {c["name"] for c in inspect(engine).get_columns("calibration_epoch")}
+    assert {"sky_ground_delta_db", "tsys_k"} <= cols
+    with db.session(engine) as s:
+        epoch = CalibrationEpoch(notes="fresh")
+        s.add(epoch)
+        s.commit()
+        s.refresh(epoch)
+        assert epoch.sky_ground_delta_db is None  # nullable, not yet computed
+        assert epoch.tsys_k is None
+
+
+def test_migration_13_upgrade_from_version_12_keeps_data(tmp_path: Path) -> None:
+    from jansky_observe.models import CalibrationEpoch
+
+    # Simulate a pre-M10-Piece3 database: run migrations 1..12, drop the two new
+    # (nullable, un-indexed) columns create_all built, insert an epoch, migrate.
+    engine = db.get_engine(tmp_path / "data")
+    with engine.begin() as conn:
+        for version, apply in db.MIGRATIONS[:12]:  # migrations 1..12
+            apply(conn)
+            conn.exec_driver_sql(f"PRAGMA user_version = {version}")
+        conn.exec_driver_sql("ALTER TABLE calibration_epoch DROP COLUMN sky_ground_delta_db")
+        conn.exec_driver_sql("ALTER TABLE calibration_epoch DROP COLUMN tsys_k")
+        conn.exec_driver_sql(
+            "INSERT INTO calibration_epoch (started_at, notes, created_at) "
+            "VALUES ('2026-07-01T00:00:00', 'keep me', '2026-07-01T00:00:00')"
+        )
+    assert _user_version(engine) == 12
+    assert "tsys_k" not in {c["name"] for c in inspect(engine).get_columns("calibration_epoch")}
+
+    db.migrate(engine)
+    assert _user_version(engine) == max(version for version, _ in db.MIGRATIONS)
+    cols = {c["name"] for c in inspect(engine).get_columns("calibration_epoch")}
+    assert {"sky_ground_delta_db", "tsys_k"} <= cols
+    with db.session(engine) as s:
+        old = s.exec(select(CalibrationEpoch).where(CalibrationEpoch.notes == "keep me")).one()
+        assert old.sky_ground_delta_db is None  # existing row defaults to NULL
+        assert old.tsys_k is None
+
+    db.migrate(engine)  # re-run is a no-op
+    assert _user_version(engine) == max(version for version, _ in db.MIGRATIONS)
+
+
 def test_migration_5_seeds_the_type_into_a_version_4_db(tmp_path: Path) -> None:
     from jansky_observe.models import ChecklistTemplateItem, ObservationType
 
