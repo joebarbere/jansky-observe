@@ -6,6 +6,15 @@ milestones**). Work that landed outside a milestone gets a brief summary under t
 that shipped it. Maintained as part of `/release` — a release isn't finished until its
 section exists here.
 
+## v0.11.2 — 2026-07-15 — Live view is no longer a navigation dead-end
+
+Browser-only, no milestone, no schema change. The live view (`/`) is a standalone page that
+didn't carry the top nav, so on a phone there was no way to reach the wizard / other pages without
+typing a URL. The nav is now extracted to a shared `_nav.html` partial and included on **both** the
+base template and the live view, so every page — including the immersive live view — has the
+`New session` / Observations / Sky / Calibration / Station links (the bar already wraps on mobile).
+Regression test added.
+
 ## v0.11.1 — 2026-07-15 — M10 "Sky/ground Tsys" (part 2 of 2 — completes M10)
 
 Second half of milestone M10 (`plans/m10-onoff-and-skyground.md`): the sky/ground **Y-factor

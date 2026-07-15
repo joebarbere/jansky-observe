@@ -174,6 +174,16 @@ def test_index_renders_live_page() -> None:
     assert __version__ in body
 
 
+def test_live_view_has_nav_so_it_is_not_a_dead_end() -> None:
+    # The live view is a standalone page (not the base template); it must still
+    # carry the shared nav so a phone user can reach the wizard without typing a URL.
+    client = TestClient(create_app(Settings(zmq_endpoint=DEAD_ENDPOINT)))
+    body = client.get("/").text
+    assert 'id="topnav"' in body
+    assert 'href="/wizard"' in body  # "New session"
+    assert 'href="/observations"' in body
+
+
 def test_index_contains_capture_panel_and_avg_controls() -> None:
     client = TestClient(create_app(Settings(zmq_endpoint=DEAD_ENDPOINT)))
     body = client.get("/").text
