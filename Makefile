@@ -17,6 +17,9 @@ test: ## Run the test suite
 cov: ## Tests with coverage (85% floor)
 	uv run pytest --cov=jansky_observe --cov-report=term-missing
 
+e2e: ## Browser end-to-end tests (needs chromium: uv run playwright install chromium)
+	uv run pytest tests/e2e -m e2e
+
 lint: ## Ruff lint
 	uv run ruff check src/ tests/
 
@@ -42,4 +45,4 @@ clean: ## Remove caches and build artifacts
 	rm -rf .pytest_cache/ .ruff_cache/ .mypy_cache/ dist/ .coverage
 	find . -type d -name __pycache__ -prune -exec rm -rf {} +
 
-.PHONY: help setup test cov lint fmt typecheck run daemon build qemu-install clean
+.PHONY: help setup test cov e2e lint fmt typecheck run daemon build qemu-install clean

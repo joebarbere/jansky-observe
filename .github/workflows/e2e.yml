@@ -1,0 +1,49 @@
+name: e2e
+
+# Browser end-to-end tests (chromium + a live server). Kept in a SEPARATE
+# workflow from ci.yml so they don't run on every trivial push: only on PRs to
+# main, on release tags, and on demand. The UI is architecture-independent, so
+# ubuntu-latest alone is enough (no arm runner, unlike ci.yml).
+on:
+  pull_request:
+    branches: [main]
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+concurrency:
+  group: e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      # The jansky dependency is a local path source (../jansky, not on PyPI); check the
+      # two repos out side by side so `uv sync` resolves it on a clean runner — the same
+      # convention as ci.yml.
+      - name: Checkout jansky-observe
+        uses: actions/checkout@v4
+        with:
+          path: jansky-observe
+      - name: Checkout jansky (the library dependency)
+        uses: actions/checkout@v4
+        with:
+          repository: joebarbere/jansky
+          ref: v0.2.0
+          path: jansky
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          python-version: "3.12"
+      - name: Sync
+        working-directory: jansky-observe
+        run: uv sync
+      - name: Install chromium (+ system deps)
+        working-directory: jansky-observe
+        run: uv run playwright install --with-deps chromium
+      - name: Browser end-to-end tests
+        working-directory: jansky-observe
+        run: make e2e
