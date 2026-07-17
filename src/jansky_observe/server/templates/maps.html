@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}sky maps — jansky-observe{% endblock %}
+{% block content %}
+<h1>HI sky maps</h1>
+<p class="muted">
+  Coarse maps of extended emission built by raster- or drift-scanning the sky. The dish is a
+  single ~21° beam, so these are <b>beam-limited</b> maps of large-scale structure (galactic
+  hydrogen, the Sun) — a low-resolution intensity/velocity chart, not a resolved image. An
+  <b>az/el</b> map is filled by the rotator raster; a <b>galactic</b> map is filled by ingesting a
+  drift-scan campaign's passes.
+</p>
+
+<section class="pane pad">
+  <h2>New map</h2>
+  <form method="post" action="/maps" class="col">
+    <div class="row">
+      <input type="text" name="name" placeholder="name" required>
+      <select name="frame" title="grid frame">
+        {% for f in frames %}<option value="{{ f }}">{{ f }}</option>{% endfor %}
+      </select>
+      <select name="metric" title="reduction metric">
+        {% for m in metrics %}<option value="{{ m }}">{{ m }}</option>{% endfor %}
+      </select>
+      <select name="source_id" title="optional map centre source">
+        <option value="">(no centre source)</option>
+        {% for s in sources %}<option value="{{ s.id }}">{{ s.name }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="row">
+      <input type="number" step="any" name="center_x_deg" placeholder="centre x°" value="0">
+      <input type="number" step="any" name="center_y_deg" placeholder="centre y°" value="0">
+      <input type="number" step="any" name="extent_x_deg" placeholder="extent x°" value="60">
+      <input type="number" step="any" name="extent_y_deg" placeholder="extent y°" value="60">
+      <input type="number" step="any" name="step_deg" placeholder="step°" value="10">
+      <input type="number" step="any" name="dwell_s" placeholder="dwell s" value="60">
+      <button class="btn" type="submit">Create (active)</button>
+    </div>
+    <p class="muted small">
+      Centre/extent/step are in the grid frame's degrees (galactic l/b, or az/el). Step ≈ half the
+      beam (~10°) samples it ~Nyquist. Dwell is the per-cell integration for the raster.
+    </p>
+  </form>
+</section>
+
+{% if rows %}
+<table class="list">
+  <tr><th>name</th><th>frame</th><th>metric</th><th>status</th><th>coverage</th><th>pointings</th></tr>
+  {% for r in rows %}
+  <tr>
+    <td><a href="/maps/{{ r.map.id }}">{{ r.map.name }}</a></td>
+    <td>{{ r.map.frame }}</td>
+    <td>{{ r.map.metric }}</td>
+    <td><span class="badge {{ 'running' if r.map.status == 'active' else 'done' }}">{{ r.map.status }}</span></td>
+    <td>{{ r.summary.n_cells_observed }} / {{ r.summary.n_cells_total }} cells</td>
+    <td>{{ r.summary.n_samples }}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% else %}
+<p class="muted">No maps yet — create one above.</p>
+{% endif %}
+{% endblock %}

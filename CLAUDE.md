@@ -119,6 +119,19 @@ MCP verb). Spec: `plans/m10-onoff-and-skyground.md`. The sky/ground Y-factor hal
 **`v0.11.1`** (`CalibrationEpoch.sky_ground_delta_db`/`tsys_k`, migration 13, `confirm/skyground.py`
 computing the ΔdB/Tsys from an epoch's `cold_sky`+`hot_ground` captures, a read-only
 `get_calibration_epochs` MCP tool → **23 tools**) — **M10 is complete.**
+**M11 (`v0.12.0` "HI mapping") is the latest milestone** (schema `user_version` **14**,
+`_migration_14_sky_map`): beam-limited raster/drift **sky maps** of extended emission. A `SkyMap`
+table + `Capture.sky_map_id`/`map_az_deg`/`map_el_deg`; a pure `confirm/mapping.py` (`cell_value` →
+hi_intensity/peak_vlsr/total_power, `grid_map` beam-weighted Gaussian binning with NaN gaps never
+interpolated) and `export/figures.py::sky_map_figure` (mandatory ~21° beam circle + resolution
+caption, hatched unobserved cells); `server/mapping.py` builds the map (read path) and runs the
+**az/el raster** (a lifespan loop slewing the grid through M9's guarded `slew` — no new device path,
+no new mutating MCP verb), while **galactic maps ingest drift-scan campaign passes**. `/maps` UI +
+`GET /api/maps[/{id}]` + `/image.png`, two read-only MCP tools (`list_sky_maps`/`get_sky_map` →
+**25 tools**), and a `sky_maps` provenance block in the M8 bundle. Read-and-reduce + guarded-slew
+only; SDR/capture path + bias-tee untouched; no `install.sh`/`OS_IMAGE` change (no QEMU gate). The
+quantitative rotation-curve fit stays downstream in jansky-research/ezRA. Spec:
+`plans/m11-hi-mapping.md`.
 This all sits on top of M8 research-bridge/guides
 (`v0.9.1`), M7 calibration/scheduling, the M6 cockpit, and the `v0.6.x` feature-complete base:
 capture (synthetic + real Airspy), observation records + wizard + observing ladder, the hline_v1

@@ -332,6 +332,49 @@ def _migration_13_calepoch_tsys(conn: Connection) -> None:
         conn.exec_driver_sql("ALTER TABLE calibration_epoch ADD COLUMN tsys_k FLOAT")
 
 
+def _migration_14_sky_map(conn: Connection) -> None:
+    """Add HI mapping (roadmap M11): the ``sky_map`` table and the capture columns
+    that tie a capture to a map cell — ``sky_map_id`` (which map) and the
+    commanded ``map_az_deg`` / ``map_el_deg`` the capture was taken at (converted
+    to the map's frame at reduce time).
+
+    Frozen DDL matching the M11 models; ``CREATE TABLE IF NOT EXISTS`` +
+    ``PRAGMA table_info`` guards make it a no-op on a fresh database (migration 1
+    builds the latest schema) and additive on an existing one. ``sky_map_id`` is
+    indexed in the models, but SQLite forbids an indexed column in ``ADD COLUMN``,
+    so — like migrations 10/11/12 — the index is created separately
+    (``IF NOT EXISTS``); both paths land on the same schema. Existing captures
+    default to ``sky_map_id = NULL`` (not part of any map).
+    """
+    conn.exec_driver_sql(
+        "CREATE TABLE IF NOT EXISTS sky_map ("
+        " id INTEGER NOT NULL PRIMARY KEY,"
+        " name VARCHAR NOT NULL,"
+        " source_id INTEGER,"
+        " frame VARCHAR NOT NULL DEFAULT 'galactic',"
+        " center_x_deg FLOAT NOT NULL DEFAULT 0.0,"
+        " center_y_deg FLOAT NOT NULL DEFAULT 0.0,"
+        " extent_x_deg FLOAT NOT NULL DEFAULT 60.0,"
+        " extent_y_deg FLOAT NOT NULL DEFAULT 60.0,"
+        " step_deg FLOAT NOT NULL DEFAULT 10.0,"
+        " dwell_s FLOAT NOT NULL DEFAULT 60.0,"
+        " metric VARCHAR NOT NULL DEFAULT 'hi_intensity',"
+        " status VARCHAR NOT NULL DEFAULT 'active',"
+        " notes VARCHAR NOT NULL DEFAULT '',"
+        " created_at DATETIME NOT NULL,"
+        " FOREIGN KEY(source_id) REFERENCES radio_source (id)"
+        ")"
+    )
+    columns = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(capture)")}
+    if "sky_map_id" not in columns:
+        conn.exec_driver_sql("ALTER TABLE capture ADD COLUMN sky_map_id INTEGER")
+    if "map_az_deg" not in columns:
+        conn.exec_driver_sql("ALTER TABLE capture ADD COLUMN map_az_deg FLOAT")
+    if "map_el_deg" not in columns:
+        conn.exec_driver_sql("ALTER TABLE capture ADD COLUMN map_el_deg FLOAT")
+    conn.exec_driver_sql("CREATE INDEX IF NOT EXISTS ix_capture_sky_map_id ON capture (sky_map_id)")
+
+
 MIGRATIONS: list[tuple[int, Callable[[Connection], None]]] = [
     (1, _migration_1_initial_schema),
     (2, _migration_2_station_stellarium_url),
@@ -346,6 +389,7 @@ MIGRATIONS: list[tuple[int, Callable[[Connection], None]]] = [
     (11, _migration_11_station_rotator),
     (12, _migration_12_capture_position),
     (13, _migration_13_calepoch_tsys),
+    (14, _migration_14_sky_map),
 ]
 
 

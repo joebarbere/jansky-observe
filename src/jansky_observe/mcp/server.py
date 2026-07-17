@@ -156,6 +156,25 @@ def build_mcp(app: FastAPI) -> FastMCP:
         return await _get(app, "/api/calibration_epochs")
 
     @mcp.tool
+    async def list_sky_maps() -> list[dict[str, Any]]:
+        """The station's HI sky maps, active first (roadmap M11): each map's id,
+        name, frame (galactic l/b or az/el), metric, status, grid geometry,
+        beam HPBW, and coverage (cells observed / total, pointing count). These
+        are beam-limited (~21°) maps of extended emission — galactic hydrogen
+        intensity/velocity or total power — NOT resolved images. Read-only."""
+        return await _get(app, "/api/maps")
+
+    @mcp.tool
+    async def get_sky_map(map_id: int) -> dict[str, Any]:
+        """One HI sky map in full (roadmap M11): geometry, metric, the beam HPBW,
+        coverage, the raster-runner state (if running), and the gridded values
+        themselves (grid[y][x], with null for unobserved cells — never
+        interpolated). The map is beam-limited: every cell is a ~21°-beam-smoothed
+        average, so read it as low-resolution large-scale structure, not resolved
+        detail. The rendered heatmap is at /api/maps/{id}/image.png. Read-only."""
+        return await _get(app, f"/api/maps/{map_id}")
+
+    @mcp.tool
     async def get_capture_meta(capture_id: int) -> dict[str, Any]:
         """One capture's metadata: file path, format, device, size, start/end
         times, full SDR settings, and the linked observation id (if any)."""

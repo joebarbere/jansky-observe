@@ -542,6 +542,64 @@ def test_migration_13_upgrade_from_version_12_keeps_data(tmp_path: Path) -> None
     assert _user_version(engine) == max(version for version, _ in db.MIGRATIONS)
 
 
+def test_migration_14_fresh_db_has_sky_map(tmp_path: Path) -> None:
+    from jansky_observe.models import Capture
+
+    engine = db.init_db(tmp_path / "data")
+    assert _user_version(engine) == max(version for version, _ in db.MIGRATIONS)
+    assert "sky_map" in inspect(engine).get_table_names()
+    caps = {c["name"] for c in inspect(engine).get_columns("capture")}
+    assert {"sky_map_id", "map_az_deg", "map_el_deg"} <= caps
+    # The sky_map_id index rode in (created separately, like migrations 10/11/12).
+    index_names = {ix["name"] for ix in inspect(engine).get_indexes("capture")}
+    assert "ix_capture_sky_map_id" in index_names
+    with db.session(engine) as s:
+        capture = Capture(device="synthetic", path="/x/a.npz", format="npz_spectra")
+        s.add(capture)
+        s.commit()
+        s.refresh(capture)
+        assert capture.sky_map_id is None  # default: not part of any map
+        assert capture.map_az_deg is None and capture.map_el_deg is None
+
+
+def test_migration_14_upgrade_from_version_13_keeps_data(tmp_path: Path) -> None:
+    from jansky_observe.models import Capture
+
+    # Simulate a pre-M11 database: run migrations 1..13, drop the FK-free
+    # map_az_deg/map_el_deg columns (SQLite can't DROP the indexed FK
+    # ``sky_map_id``; migration 14 guards it and is idempotent — the fresh-DB
+    # test + the re-run below cover it), then migrate forward.
+    engine = db.get_engine(tmp_path / "data")
+    with engine.begin() as conn:
+        for version, apply in db.MIGRATIONS[:13]:  # migrations 1..13
+            apply(conn)
+            conn.exec_driver_sql(f"PRAGMA user_version = {version}")
+        conn.exec_driver_sql("ALTER TABLE capture DROP COLUMN map_az_deg")
+        conn.exec_driver_sql("ALTER TABLE capture DROP COLUMN map_el_deg")
+        conn.exec_driver_sql("DROP TABLE IF EXISTS sky_map")
+        conn.exec_driver_sql(
+            "INSERT INTO capture (device, path, format, size_bytes, kind, position, created_at) "
+            "VALUES ('airspy', '/x/old.npz', 'npz_spectra', 9, 'science', 'on', "
+            "'2026-07-01T00:00:00')"
+        )
+    assert _user_version(engine) == 13
+    assert "sky_map" not in inspect(engine).get_table_names()
+    assert "map_az_deg" not in {c["name"] for c in inspect(engine).get_columns("capture")}
+
+    db.migrate(engine)
+    assert _user_version(engine) == max(version for version, _ in db.MIGRATIONS)
+    assert "sky_map" in inspect(engine).get_table_names()
+    caps = {c["name"] for c in inspect(engine).get_columns("capture")}
+    assert {"sky_map_id", "map_az_deg", "map_el_deg"} <= caps
+    with db.session(engine) as s:
+        old = s.exec(select(Capture).where(Capture.path == "/x/old.npz")).one()
+        assert old.sky_map_id is None  # existing row untagged
+        assert old.map_az_deg is None and old.map_el_deg is None
+
+    db.migrate(engine)  # re-run is a no-op
+    assert _user_version(engine) == max(version for version, _ in db.MIGRATIONS)
+
+
 def test_migration_5_seeds_the_type_into_a_version_4_db(tmp_path: Path) -> None:
     from jansky_observe.models import ChecklistTemplateItem, ObservationType
 

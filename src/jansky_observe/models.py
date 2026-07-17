@@ -23,6 +23,8 @@ __all__ = [
     "CAPTURE_KINDS",
     "CAPTURE_POSITIONS",
     "ROTATOR_KINDS",
+    "SKY_MAP_FRAMES",
+    "SKY_MAP_METRICS",
     "CalibrationEpoch",
     "Campaign",
     "Capture",
@@ -37,6 +39,7 @@ __all__ = [
     "Photo",
     "RadioSource",
     "Schedule",
+    "SkyMap",
     "Station",
     "new_station_uuid",
     "utcnow",
@@ -348,6 +351,54 @@ class Campaign(SQLModel, table=True):
     created_at: datetime = Field(default_factory=utcnow)
 
 
+#: Sky-map coordinate frames (roadmap M11). ``"galactic"`` (l/b, the default —
+#: HI maps live there) or ``"azel"`` (what the rotator commands). Each capture's
+#: commanded az/el is converted to the map's frame at reduce time.
+SKY_MAP_FRAMES: tuple[str, ...] = ("galactic", "azel")
+#: Per-cell reduction metrics (roadmap M11): ``"hi_intensity"`` (baseline-subtracted
+#: integrated HI line flux in the Doppler window), ``"peak_vlsr"`` (v_LSR of the
+#: peak, km/s), or ``"total_power"`` (band-mean power in dB — continuum).
+SKY_MAP_METRICS: tuple[str, ...] = ("hi_intensity", "peak_vlsr", "total_power")
+
+
+class SkyMap(SQLModel, table=True):
+    """A raster/drift sky map (roadmap M11): a grid of pointings reduced to a
+    coarse 2-D map of extended emission — beam-limited to the dish's ~21° HPBW.
+
+    A map groups :class:`Capture` rows (each carrying the commanded az/el it was
+    taken at); the reduction bins them onto the grid defined here in the chosen
+    ``frame``. Captures arrive either from the raster runner
+    (:mod:`jansky_observe.server.mapping`, which slews a grid) or by ingesting a
+    drift-scan :class:`Campaign`'s passes. The grid centre + extent + step are in
+    the map's ``frame`` degrees (galactic l/b, or az/el).
+    """
+
+    __tablename__ = "sky_map"
+
+    id: int | None = Field(default=None, primary_key=True)
+    name: str = Field(index=True)
+    #: Optional map centre source (a blank-sky galactic strip has none).
+    source_id: int | None = Field(default=None, foreign_key="radio_source.id")
+    #: One of :data:`SKY_MAP_FRAMES` — the grid/axis frame.
+    frame: str = "galactic"
+    #: Grid centre in the map frame (l/b or az/el degrees).
+    center_x_deg: float = 0.0
+    center_y_deg: float = 0.0
+    #: Full grid extent (degrees) along each axis; cells are ``step_deg`` apart.
+    extent_x_deg: float = 60.0
+    extent_y_deg: float = 60.0
+    #: Cell spacing in degrees (~half the ~21° beam ⇒ Nyquist-ish sampling).
+    step_deg: float = 10.0
+    #: Per-cell integration seconds for the raster runner.
+    dwell_s: float = 60.0
+    #: Default reduction metric (one of :data:`SKY_MAP_METRICS`).
+    metric: str = "hi_intensity"
+    #: ``"active"`` (the raster runner fills it) or ``"done"``.
+    status: str = "active"
+    notes: str = ""
+    created_at: datetime = Field(default_factory=utcnow)
+
+
 class Capture(SQLModel, table=True):
     """A recorded data file on disk, referenced by path.
 
@@ -392,6 +443,14 @@ class Capture(SQLModel, table=True):
     #: On an ``"off"`` capture, the ``"on"`` :class:`Capture` it references for
     #: ON−OFF differencing (same observation); ``None`` on unpaired captures.
     pair_capture_id: int | None = Field(default=None, foreign_key="capture.id", index=True)
+    #: The sky map this capture is a cell of (roadmap M11), or ``None``.
+    sky_map_id: int | None = Field(default=None, foreign_key="sky_map.id", index=True)
+    #: The commanded az/el this capture was taken at (roadmap M11) — the raster
+    #: runner's slew target, or a drift campaign's fixed az/el on ingest. With the
+    #: capture's start time + station location this converts to the map's frame
+    #: (galactic l/b or az/el) at reduce time. ``None`` outside a sky map.
+    map_az_deg: float | None = None
+    map_el_deg: float | None = None
     created_at: datetime = Field(default_factory=utcnow)
 
 

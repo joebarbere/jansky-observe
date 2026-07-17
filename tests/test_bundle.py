@@ -175,6 +175,29 @@ def test_manifest_carries_station_uuid_pointing_and_lst(engine: Engine, tmp_path
     assert json.loads(json.dumps(manifest))["captures"][0]["id"] == cap_id
 
 
+def test_manifest_lists_sky_maps_the_captures_feed(engine: Engine, tmp_path) -> None:
+    from jansky_observe.models import SkyMap
+
+    obs_id = _observation(engine)
+    npz = _write_capture(tmp_path / "captures" / "c.npz")
+    cap_id = _add_capture(engine, npz, obs_id)
+    with Session(engine) as session:
+        sky_map = SkyMap(name="galactic strip", frame="galactic", metric="hi_intensity")
+        session.add(sky_map)
+        session.commit()
+        session.refresh(sky_map)
+        capture = session.get(Capture, cap_id)
+        capture.sky_map_id = sky_map.id
+        session.add(capture)
+        session.commit()
+        observation = session.get(Observation, obs_id)
+        manifest = build_observation_manifest(session, observation)
+
+    (block,) = manifest["sky_maps"]
+    assert block["name"] == "galactic strip" and block["frame"] == "galactic"
+    assert json.loads(json.dumps(manifest))["sky_maps"][0]["metric"] == "hi_intensity"
+
+
 def test_manifest_no_spectrum_file_for_sigmf_or_purged(engine: Engine, tmp_path) -> None:
     obs_id = _observation(engine)
     npz = _write_capture(tmp_path / "captures" / "c.npz")
