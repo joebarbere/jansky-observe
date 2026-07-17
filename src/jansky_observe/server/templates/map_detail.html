@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}{{ map.name }} — sky map — jansky-observe{% endblock %}
+{% block content %}
+<p><a href="/maps">← all maps</a></p>
+<h1>{{ map.name }}</h1>
+<p class="muted">
+  {{ map.frame }} frame · metric <b>{{ map.metric }}</b> ·
+  <span class="badge {{ 'running' if map.status == 'active' else 'done' }}">{{ map.status }}</span> ·
+  grid {{ "%.0f"|format(map.extent_x_deg) }}°×{{ "%.0f"|format(map.extent_y_deg) }}° @ {{ "%.0f"|format(map.step_deg) }}° ·
+  centre ({{ "%.1f"|format(map.center_x_deg) }}, {{ "%.1f"|format(map.center_y_deg) }})°
+</p>
+
+<section class="pane pad">
+  <img src="/api/maps/{{ map.id }}/image.png" alt="sky map heatmap"
+       style="max-width:100%;height:auto;border-radius:6px">
+  <p class="muted small">
+    Beam-limited: resolution ≈ {{ "%.0f"|format(summary.hpbw_deg) }}° (HPBW) — each pixel is a
+    beam-smoothed average of {{ summary.n_samples }} pointings; hatched cells are unobserved.
+    Coverage {{ summary.n_cells_observed }} / {{ summary.n_cells_total }} cells.
+  </p>
+  <p class="row small">
+    view metric:
+    {% for m in metrics %}
+      <a class="btn small" href="/api/maps/{{ map.id }}/image.png?metric={{ m }}" target="_blank">{{ m }}</a>
+    {% endfor %}
+  </p>
+</section>
+
+{% if run %}
+<section class="pane pad">
+  <h2>Raster running</h2>
+  <p>{{ run.cells_done }} / {{ run.cells_total }} cells — <span class="muted">{{ run.note }}</span></p>
+  <form method="post" action="/maps/{{ map.id }}/stop"><button class="btn" type="submit">Stop raster</button></form>
+</section>
+{% endif %}
+
+<section class="pane pad">
+  <h2>Fill this map</h2>
+  {% if map.frame == "azel" %}
+    <p class="muted small">
+      Raster this az/el grid with the rotator — it slews cell to cell, dwelling {{ "%.0f"|format(map.dwell_s) }} s
+      each, through the hard-limit-checked slew primitive. Needs a configured rotator.
+    </p>
+    {% if not run %}
+      {% if rotator_configured and map.status == "active" %}
+        <form method="post" action="/maps/{{ map.id }}/start"><button class="btn" type="submit">Start raster</button></form>
+      {% else %}
+        <p class="muted">{{ "Configure a rotator on /station to raster." if not rotator_configured else "Re-activate the map to raster." }}</p>
+      {% endif %}
+    {% endif %}
+  {% else %}
+    <p class="muted small">
+      Galactic maps are filled by ingesting a drift-scan campaign's passes — each capture's beam
+      az/el converts to l/b at its own time.
+    </p>
+    {% if campaigns %}
+    <form method="post" action="/maps/{{ map.id }}/ingest" class="row">
+      <select name="campaign_id" required>
+        {% for c in campaigns %}<option value="{{ c.id }}">{{ c.name }} (az {{ "%.0f"|format(c.fixed_az_deg) }}° / el {{ "%.0f"|format(c.fixed_el_deg) }}°)</option>{% endfor %}
+      </select>
+      <button class="btn" type="submit">Ingest campaign captures</button>
+    </form>
+    {% else %}
+    <p class="muted">No drift-scan campaigns with a fixed az/el yet — create one on /campaigns.</p>
+    {% endif %}
+  {% endif %}
+</section>
+
+<section class="pane pad">
+  <h2>Status</h2>
+  <form method="post" action="/maps/{{ map.id }}/status" class="row">
+    <select name="status">
+      <option value="active" {{ 'selected' if map.status == 'active' }}>active</option>
+      <option value="done" {{ 'selected' if map.status == 'done' }}>done</option>
+    </select>
+    <button class="btn" type="submit">Set status</button>
+  </form>
+  {% if map.notes %}<p class="muted">{{ map.notes }}</p>{% endif %}
+</section>
+{% endblock %}

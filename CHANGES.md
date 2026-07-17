@@ -6,6 +6,48 @@ milestones**). Work that landed outside a milestone gets a brief summary under t
 that shipped it. Maintained as part of `/release` — a release isn't finished until its
 section exists here.
 
+## v0.12.0 — 2026-07-17 — M11 "HI mapping — raster & drift sky maps"
+
+Milestone M11 (`plans/m11-hi-mapping.md`): the "can I make images with the dish?" answer — turn a
+set of pointed captures into a coarse 2-D **map** of extended emission (galactic HI intensity /
+peak v_LSR / total power). It is honest about the ceiling: the 0.7 m dish is a single ~21° beam, so
+these are **beam-limited** maps of large-scale structure, not resolved images — the renderer stamps
+the resolution on every figure and never fills a cell it didn't observe. Schema advances to
+`user_version` **14**. No `install.sh`/`OS_IMAGE` change (no QEMU gate); the SDR/capture path and
+the bias-tee invariant are untouched, and the raster runner moves hardware **only** through M9's
+already-guarded `slew` primitive — no new device path, no new mutating MCP verb.
+
+- **SkyMap model + tagging** (schema `user_version` **14**, `_migration_14_sky_map`): a `sky_map`
+  table (name, frame, grid centre/extent/step, dwell, metric, status) plus `capture.sky_map_id` and
+  the commanded `capture.map_az_deg`/`map_el_deg` a cell was taken at. Additive; existing captures
+  stay untagged.
+- **Reduction + heatmap** (`confirm/mapping.py`, pure numpy): `cell_value` reduces one averaged
+  spectrum to a scalar — `hi_intensity` (baseline-subtracted line flux integrated over the Doppler
+  window), `peak_vlsr` (km/s of the in-window peak), or `total_power` (band-mean dB). `grid_map`
+  bins the samples with **beam-weighted (Gaussian-of-HPBW)** accumulation and leaves cells with no
+  nearby pointing as **NaN gaps — never interpolated across**. `export/figures.py::sky_map_figure`
+  renders the heatmap with a mandatory ~21° beam circle + resolution caption and hatched
+  unobserved cells (diverging colormap for velocity).
+- **Acquire two ways** (`server/mapping.py`): an **az/el raster runner** (a lifespan loop like M7's
+  scheduler / M9's tracking) slews a grid through the guarded `slew` primitive, dwells to record a
+  capture per cell, and tags it — with the disk-red guardrail, out-of-limits-cell skipping, and
+  transport-error abort all reused. Galactic maps are filled by **ingesting a drift-scan campaign's
+  passes** (no hardware; each capture's beam az/el converts to l/b at its own time). The re-point
+  decision (`next_map_cell`) is a pure, tested function.
+- **UI + API**: a `/maps` index + `/maps/{id}` detail (the rendered heatmap, coverage, a metric
+  view toggle, raster start/stop or campaign-ingest controls) and a "Maps" nav link;
+  `GET /api/maps[/{id}]` (geometry + coverage + gridded values) and `GET /api/maps/{id}/image.png`
+  (metric-overridable). All mutating verbs HTML-only.
+- **MCP (read-only)**: `list_sky_maps` + `get_sky_map` return a map's geometry, coverage, beam HPBW,
+  and gridded values (null for unobserved cells) — MCP surface **23 → 25 tools**, still read-only.
+- **Provenance**: the observation bundle manifest (M8) now carries a `sky_maps` block (the maps an
+  observation's captures feed), so the map is machine-recoverable and ezRA-ingestible downstream.
+
+Scope note: the quantitative rotation-curve fit stays downstream in jansky-research/ezRA (this
+milestone ships the gridded map image + data); maps are in **relative** units (K-calibration waits
+on Tsys/flux-cal); and per-observation PDF embedding of a (cross-observation) map was deferred in
+favour of the bundle `sky_maps` provenance + the map's own page/image.
+
 ## v0.11.2 — 2026-07-15 — Live view is no longer a navigation dead-end
 
 Browser-only, no milestone, no schema change. The live view (`/`) is a standalone page that

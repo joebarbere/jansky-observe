@@ -95,10 +95,12 @@ def test_tool_surface_has_no_forbidden_verbs(tmp_path):
         "get_observation_bundle",
         "get_pointing",
         "get_rotator_status",
+        "get_sky_map",
         "get_spectrum",
         "get_station_identity",
         "get_weather",
         "list_observations",
+        "list_sky_maps",
         "reset_hi_badge",
         "run_classifier",
         "slew_rotator",
@@ -166,6 +168,30 @@ def test_draft_note_tick_round_trip(tmp_path):
             assert ticked_item["checked"] and ticked_item["checked_by"] == "claude"
 
     asyncio.run(scenario())
+
+
+def test_sky_map_tools_read_a_map(tmp_path):
+    from jansky_observe.models import SkyMap
+
+    app = _app(tmp_path)
+    with Session(app.state.engine) as session:
+        sky_map = SkyMap(name="galactic strip", frame="galactic", metric="hi_intensity")
+        session.add(sky_map)
+        session.commit()
+        session.refresh(sky_map)
+        map_id = sky_map.id
+    mcp = build_mcp(app)
+
+    async def scenario():
+        async with Client(mcp) as client:
+            listed = _payload(await client.call_tool("list_sky_maps", {}))
+            one = _payload(await client.call_tool("get_sky_map", {"map_id": map_id}))
+            return listed, one
+
+    listed, one = asyncio.run(scenario())
+    assert any(m["id"] == map_id for m in listed)
+    assert one["name"] == "galactic strip"
+    assert one["frame"] == "galactic" and "grid" in one and "hpbw_deg" in one
 
 
 def test_get_diagnostics_returns_all_checks(tmp_path):

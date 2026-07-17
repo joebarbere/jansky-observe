@@ -289,7 +289,10 @@ Net: the station track doesn't change v0.x scope — M1–M5 stand — but it fi
 ## 11. Open questions / later
 
 - **Motorized rotator:** hamlib `rotctld` speaks a simple TCP protocol most rotator UIs support; Stellarium's Telescope Control plugin could then drive real pointing. Design the pointing code so "az/el setpoint" is a value today and a rotctld command later.
-- **ezRA import** (read `.txt`/`.ezb` into Captures) and drift-scan sky maps (ezGal-style) — after export proves the format.
+- **ezRA import** (read `.txt`/`.ezb` into Captures) — after export proves the format. (The
+  drift-scan **sky maps** half of this item is now promoted to a scheduled milestone: **M11
+  (v0.12.0), spec `plans/m11-hi-mapping.md`** — in-station raster/drift HI maps, beam-limited to
+  ~21°; the quantitative rotation-curve reduction still lives downstream in ezRA.)
 - **Multi-station / remote station:** schema already allows it; auth (currently LAN-trust, no login) becomes the real work.
 - **24/7 / unattended "campaign mode":** deliberately out of v0.x scope (it changes the storage and supervision story entirely) — but no longer a maybe: **station slices S3 (12-month daily Doppler campaign), S4 (months of sidereal drift passes), and S8 (daily solar transits) all require scheduled recurring observation** (§10.1). This is the named post-1.0 direction, second after calibration. v0.x guardrail: keep "what to observe" (Observation/ObservationType) separable from "when it runs" (today: a human; later: a scheduler row) so campaign mode is additive.
 - **Calibration:** hot/cold or Y-factor to real temperature units, **plus Cas A/Cyg A transit flux calibration** — promoted from "later" to the **first post-1.0 milestone** (§10.1): station slices S2 (calibrated spectra), S3 (weekly cal cadence, stored cal solutions to bound gain/bandpass drift), and S8 (flux-calibrated or killed) all depend on it. Shape: a calibration ObservationType + math module + a CalSolution table applied at spectrum render time. v1 still reports relative power/SNR only.

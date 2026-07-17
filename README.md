@@ -41,9 +41,11 @@ transit scheduler), the **`v0.9.0` research bridge & guides** milestone (a stabl
 UUID, the codified JSON+npz observation bundle plan 78 consumes, and printable build +
 observation guide PDFs), and the **`v0.10.0` rotator** milestone (az/el control of the KrakenRF
 Discovery Drive over rotctl-TCP + EasyComm II, drift tracking, and a guarded `slew_rotator` MCP
-verb) over a 22-tool MCP surface, and the **`v0.11.x` M10** milestone (ON/OFF
+verb), the **`v0.11.x` M10** milestone (ON/OFF
 position-switching captures, an ON−OFF difference classifier, and a sky/ground ΔdB/Tsys
-Y-factor reduction). **`v1.0.0` is not a feature** — it is tagged
+Y-factor reduction), and the **`v0.12.0` M11 HI-mapping** milestone (beam-limited raster/drift
+maps of galactic HI intensity/velocity and total power) over a 25-tool MCP surface.
+**`v1.0.0` is not a feature** — it is tagged
 after one real end-to-end observing campaign (plan → observe → confirm → PDF). See
 `CHANGES.md` for the full version history and `plans/roadmap-post-v0.6.md` for what comes
 after.
@@ -61,6 +63,7 @@ after.
 | `v0.9.0` | M8 | Research bridge: station UUID, export bundle, build-guide PDFs | ✅ done |
 | `v0.10.0` | M9 | Rotator: Discovery Drive (rotctl TCP / EasyComm II), drift tracking | ✅ done |
 | `v0.11.0`–`v0.11.1` | M10 | Position switching (ON/OFF) + ON−OFF difference classifier + sky/ground ΔdB/Tsys | ✅ done |
+| `v0.12.0` | M11 | HI mapping: beam-limited raster/drift sky maps (intensity / v_LSR / total power) | ✅ done |
 | `v1.0.0` | — | Tagged after one real campaign, from whatever v0.x is current | 📋 planned |
 
 The post-v0.6 milestones are specified in `plans/roadmap-post-v0.6.md` — they build while

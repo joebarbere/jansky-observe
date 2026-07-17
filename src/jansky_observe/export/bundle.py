@@ -42,6 +42,7 @@ from jansky_observe.models import (
     ObservationType,
     Observer,
     RadioSource,
+    SkyMap,
     Station,
     utcnow,
 )
@@ -164,6 +165,10 @@ def build_observation_manifest(session: Session, observation: Observation) -> di
     captures = session.exec(
         select(Capture).where(Capture.observation_id == observation.id).order_by(col(Capture.id))
     ).all()
+    # The distinct HI sky maps (roadmap M11) this observation's captures feed —
+    # light provenance (geometry + metric); the gridded values ride the map API.
+    sky_map_ids = sorted({c.sky_map_id for c in captures if c.sky_map_id is not None})
+    sky_maps = [session.get(SkyMap, mid) for mid in sky_map_ids]
 
     az_deg = (
         observation.pointing_az_deg
@@ -232,6 +237,20 @@ def build_observation_manifest(session: Session, observation: Observation) -> di
             "observers": [o.name for o in observers],
         },
         "captures": [_capture_block(session, c, lon_deg, (az_deg, el_deg)) for c in captures],
+        "sky_maps": [
+            {
+                "id": m.id,
+                "name": m.name,
+                "frame": m.frame,
+                "metric": m.metric,
+                "center_deg": [m.center_x_deg, m.center_y_deg],
+                "extent_deg": [m.extent_x_deg, m.extent_y_deg],
+                "step_deg": m.step_deg,
+                "status": m.status,
+            }
+            for m in sky_maps
+            if m is not None
+        ],
     }
 
 

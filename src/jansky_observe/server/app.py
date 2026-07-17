@@ -43,12 +43,14 @@ from jansky_observe.db import init_db
 from jansky_observe.frames import SpectralFrame, decode_zmq, pack_ws
 from jansky_observe.server.diagnostics import collect_diagnostics
 from jansky_observe.server.live_badge import LiveBadge
+from jansky_observe.server.mapping import MapRunState, map_loop
 from jansky_observe.server.routers import (
     calibration,
     campaigns,
     catalog,
     gps,
     guides,
+    maps,
     observations,
     photos,
     reports,
@@ -256,6 +258,11 @@ async def _lifespan(application: FastAPI) -> AsyncIterator[None]:
     # cadence while an observation is running and tracking is enabled.
     track_task = asyncio.create_task(tracking_loop(application))
     application.state.tracking_task = track_task
+    # HI sky-map raster (roadmap M11): slews an az/el grid and records a capture per
+    # cell while a map is active; idle otherwise. Moves hardware only via the
+    # guarded slew primitive.
+    map_task = asyncio.create_task(map_loop(application))
+    application.state.mapping_task = map_task
     # FastMCP's HTTP transport runs a session manager inside the sub-app's own
     # lifespan — it must be entered here or /mcp requests 500.
     mcp_app = application.state.mcp_app
@@ -263,7 +270,7 @@ async def _lifespan(application: FastAPI) -> AsyncIterator[None]:
         async with mcp_app.router.lifespan_context(mcp_app):
             yield
     finally:
-        for background in (task, sched_task, track_task):
+        for background in (task, sched_task, track_task, map_task):
             background.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await background
@@ -298,6 +305,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
     application.state.weather_cache = WeatherCache()
     application.state.scheduler = SchedulerState()
     application.state.tracking = TrackingState()
+    application.state.mapping = MapRunState()
     application.mount("/static", StaticFiles(directory=str(_PACKAGE_DIR / "static")), name="static")
     application.include_router(observations.router)
     # gps before catalog: /catalog/locations/from-gps must beat /catalog/locations/{id}.
@@ -307,6 +315,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
     application.include_router(captures_router)
     application.include_router(calibration.router)
     application.include_router(campaigns.router)
+    application.include_router(maps.router)
     application.include_router(schedules.router)
     application.include_router(sky.router)
     application.include_router(photos.router)
