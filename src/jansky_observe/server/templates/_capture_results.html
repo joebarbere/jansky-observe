@@ -23,6 +23,15 @@
         hx-target="#cap-confirm-{{ capture.id }}" hx-swap="innerHTML"
         title="classify the ON−OFF difference against paired OFF #{{ pair_off_id }}">Classify difference (ON−OFF)</button>
 {% endif %}
+<div class="muted small cap-analysis">
+  analysis:
+  <a href="/api/captures/{{ capture.id }}/overlay.png" target="_blank"
+     title="observed spectrum vs the LAB reference model for this direction (shape only)">model overlay</a> ·
+  <a href="/api/captures/{{ capture.id }}/power_histogram.png" target="_blank"
+     title="total-power distribution + Gaussian fit — a non-Gaussian tail flags RFI/saturation">noise histogram</a> ·
+  <a href="/api/captures/{{ capture.id }}/radiometer" target="_blank"
+     title="radiometer-equation noise floor + predicted SNR + time-to-detect (needs a sky/ground Tsys)">radiometer</a>
+</div>
 {% elif not results %}
 <span class="muted">&mdash;</span>
 {% endif %}

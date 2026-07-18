@@ -132,6 +132,19 @@ no new mutating MCP verb), while **galactic maps ingest drift-scan campaign pass
 only; SDR/capture path + bias-tee untouched; no `install.sh`/`OS_IMAGE` change (no QEMU gate). The
 quantitative rotation-curve fit stays downstream in jansky-research/ezRA. Spec:
 `plans/m11-hi-mapping.md`.
+**M12 (`v0.13.0` "Model overlay, radiometer SNR & noise diagnostics") is the latest milestone** —
+**no schema change** (`user_version` stays 14), closing the three graph-output gaps a Virgo
+comparison surfaced, all **advisory, never verdicts**: `confirm/radiometer.py` (`ΔT_rms =
+Tsys/√(Δν·τ)` + predicted SNR + time-to-detect, from the M10 Tsys), `confirm/noise.py`
+(`power_distribution` — a Gaussian fit + non-Gaussianity RFI/saturation flag), and a reference-model
+overlay (`astro/hi_reference.py` with a **pluggable** provider: best-effort LAB EU-HOU web fetch —
+Virgo's source — **or** a jansky-research plan-78-supplied profile, the cross-repo seam;
+`export/figures.py::profile_overlay_figure`, shape-only). Surfaced via
+`/api/captures/{id}/{radiometer,noise,overlay}` (+ `.png`s), detail-page links, the PDF report
+(histogram + radiometer line, network-free), a per-capture `radiometer` bundle block, and two
+read-only MCP tools (`get_radiometer_estimate` + `get_hi_model_overlay` → **27 tools**). The
+quantitative model cross-check (`hi4pi_xcheck`) stays deferred to jansky-research plan 78; N_HI /
+FITS / all-sky-map / pulsar are parked. Spec: `plans/m12-model-overlay-and-radiometer.md`.
 This all sits on top of M8 research-bridge/guides
 (`v0.9.1`), M7 calibration/scheduling, the M6 cockpit, and the `v0.6.x` feature-complete base:
 capture (synthetic + real Airspy), observation records + wizard + observing ladder, the hline_v1

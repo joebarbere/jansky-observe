@@ -22,6 +22,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 from astropy.coordinates import SkyCoord
 from jinja2 import Environment, FileSystemLoader
 from sqlalchemy import Engine
@@ -30,8 +31,14 @@ from sqlmodel import Session, col, select
 from jansky_observe import __version__
 from jansky_observe.astro.pointing import target_coord
 from jansky_observe.capture.hackrf_sweep import rfi_sweep_comparison
+from jansky_observe.confirm.noise import power_distribution
+from jansky_observe.confirm.radiometer import radiometer_estimate
 from jansky_observe.export.bundle import build_observation_manifest
-from jansky_observe.export.figures import profile_figure, waterfall_figure
+from jansky_observe.export.figures import (
+    profile_figure,
+    total_power_histogram_figure,
+    waterfall_figure,
+)
 from jansky_observe.models import (
     CalibrationEpoch,
     Capture,
@@ -164,8 +171,55 @@ def _capture_entries(
             )
             entry["profile_uri"] = profile.resolve().as_uri()
             entry["waterfall_uri"] = waterfall.resolve().as_uri()
+            # M12 diagnostics (no network): total-power histogram + radiometer estimate.
+            cal_epoch = (
+                session.get(CalibrationEpoch, capture.cal_epoch_id)
+                if capture.cal_epoch_id is not None
+                else None
+            )
+            entry["histogram_uri"], entry["radiometer"] = _capture_analysis(
+                capture, cal_epoch, figures_dir
+            )
         entries.append(entry)
     return entries
+
+
+def _capture_analysis(
+    capture: Capture, cal_epoch: CalibrationEpoch | None, figures_dir: Path
+) -> tuple[str | None, dict[str, Any] | None]:
+    """The M12 total-power histogram URI + radiometer estimate for a report row.
+
+    Both best-effort and network-free: a bad file or too-few frames yields
+    ``(None, None)``; the radiometer needs an M10 Tsys on the capture's epoch."""
+    try:
+        with np.load(Path(capture.path), allow_pickle=False) as data:
+            power_db = np.asarray(data["power_db"], dtype=np.float64)
+            sample_rate_hz = float(data["sample_rate_hz"])
+            timestamps = np.asarray(data.get("timestamps", []), dtype=np.float64)
+    except (FileNotFoundError, KeyError, OSError):
+        return None, None
+    histogram_uri: str | None = None
+    try:
+        dist = power_distribution(power_db)
+        fig = total_power_histogram_figure(
+            dist, figures_dir / f"capture-{capture.id}-noise.png", title="Total-power distribution"
+        )
+        histogram_uri = fig.resolve().as_uri()
+    except ValueError:
+        histogram_uri = None
+    radiometer: dict[str, Any] | None = None
+    if cal_epoch is not None and cal_epoch.tsys_k is not None and power_db.ndim == 2:
+        n_fft = power_db.shape[1]
+        integration_s = float(timestamps[-1] - timestamps[0]) if timestamps.size > 1 else 0.0
+        if integration_s <= 0.0 and capture.start is not None and capture.end is not None:
+            integration_s = max((capture.end - capture.start).total_seconds(), 0.0)
+        if integration_s > 0.0:
+            radiometer = radiometer_estimate(
+                tsys_k=cal_epoch.tsys_k,
+                channel_bw_hz=sample_rate_hz / n_fft,
+                integration_s=integration_s,
+            )
+    return histogram_uri, radiometer
 
 
 def _gather_context(session: Session, observation: Observation, data_dir: Path) -> dict[str, Any]:

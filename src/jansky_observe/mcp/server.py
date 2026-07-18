@@ -189,6 +189,17 @@ def build_mcp(app: FastAPI) -> FastMCP:
         return await _get(app, f"/api/captures/{capture_id}/spectrum", axis=axis)
 
     @mcp.tool
+    async def get_radiometer_estimate(capture_id: int) -> dict[str, Any]:
+        """The radiometer-equation sensitivity for a capture (roadmap M12): the
+        theoretical noise floor delta_t_rms_k = Tsys/sqrt(channel_bw·integration),
+        the predicted SNR of an assumed ~50 K HI line, and time_to_target_s to reach
+        SNR 5. Needs an M10 sky/ground Tsys on the capture's calibration epoch (else
+        {available:false, reason}). This is an ESTIMATE that contextualises the
+        classifier's empirical SNR — it is NOT a detection verdict; use it to tell an
+        under-integrated non-detection from a genuinely absent line. Read-only."""
+        return await _get(app, f"/api/captures/{capture_id}/radiometer")
+
+    @mcp.tool
     async def run_classifier(capture_id: int) -> dict[str, Any]:
         """Run the deterministic hline_v1 classifier on an npz_spectra capture.
         Appends a ClassifierResult row (name+version+params) and renders the
@@ -196,6 +207,17 @@ def build_mcp(app: FastAPI) -> FastMCP:
         from this deterministic classifier — never assert a detection yourself;
         run this, then interpret the recorded result in notes."""
         return await _post_json(app, f"/api/captures/{capture_id}/classify", {})
+
+    @mcp.tool
+    async def get_hi_model_overlay(capture_id: int) -> dict[str, Any]:
+        """The observed spectrum + a reference HI-survey (LAB) model for the capture's
+        galactic direction (roadmap M12): the observed v_LSR spectrum plus the expected
+        profile, for a SHAPE comparison (does the bump sit at the model's velocity, with
+        a similar width?). Observed is relative power, so it's shape-only. Best-effort:
+        {available:false, reason} when there's no pointing or no model (offline / off the
+        surveyed sky). This is a VISUAL AID, not a detection verdict — the quantitative
+        model cross-check lives in jansky-research. Read-only."""
+        return await _get(app, f"/api/captures/{capture_id}/overlay")
 
     @mcp.tool
     async def get_hi_badge() -> dict[str, Any]:

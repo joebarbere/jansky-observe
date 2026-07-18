@@ -32,6 +32,7 @@ from pydantic import BaseModel
 from sqlalchemy import Engine
 from sqlmodel import Session, col, select
 
+from jansky_observe.astro.hi_reference import reference_profile
 from jansky_observe.astro.lsr import vlsr_axis
 from jansky_observe.astro.pointing import sidereal_day_number
 from jansky_observe.confirm.classifier import (
@@ -41,9 +42,12 @@ from jansky_observe.confirm.classifier import (
     classify_capture_npz,
     classify_difference_npz,
 )
+from jansky_observe.confirm.noise import power_distribution
 from jansky_observe.confirm.onoff import difference_spectrum
 from jansky_observe.confirm.plots import verdict_plot
+from jansky_observe.confirm.radiometer import radiometer_estimate
 from jansky_observe.control import ctl_request
+from jansky_observe.export.figures import profile_overlay_figure, total_power_histogram_figure
 from jansky_observe.models import (
     CAPTURE_POSITIONS,
     CalibrationEpoch,
@@ -618,6 +622,182 @@ def set_capture_position(
     session.commit()
     dest = f"/observations/{capture.observation_id}" if capture.observation_id else "/observations"
     return RedirectResponse(dest, status_code=303)
+
+
+def _dsp_params(capture: Capture) -> tuple[float, float]:
+    """``(channel_bw_hz, integration_s)`` read from a capture's ``.npz``.
+
+    Channel bandwidth is ``sample_rate_hz / n_fft``; integration time is the span
+    of the recorded frame timestamps, falling back to the row's start/end span.
+    Raises ``FileNotFoundError`` when the file is gone (caller maps to 404).
+    """
+    with np.load(Path(capture.path), allow_pickle=False) as data:
+        power_db = np.asarray(data["power_db"], dtype=np.float64)
+        sample_rate_hz = float(data["sample_rate_hz"])
+        timestamps = np.asarray(data.get("timestamps", []), dtype=np.float64)
+    n_fft = power_db.shape[1] if power_db.ndim == 2 else power_db.shape[0]
+    channel_bw_hz = sample_rate_hz / n_fft
+    integration_s = float(timestamps[-1] - timestamps[0]) if timestamps.size > 1 else 0.0
+    if integration_s <= 0.0 and capture.start is not None and capture.end is not None:
+        integration_s = max((capture.end - capture.start).total_seconds(), 0.0)
+    return channel_bw_hz, integration_s
+
+
+def _radiometer_for_capture(session: Session, capture: Capture) -> dict[str, Any]:
+    """The radiometer estimate for a capture, or ``{"available": False, ...}``.
+
+    Needs an M10 sky/ground Tsys on the capture's calibration epoch; degrades with
+    a reason (no epoch / no Tsys / no integration time) rather than raising. An
+    estimate, never a verdict (plan §12.5)."""
+    if capture.cal_epoch_id is None:
+        return {"available": False, "reason": "capture has no calibration epoch"}
+    epoch = session.get(CalibrationEpoch, capture.cal_epoch_id)
+    if epoch is None or epoch.tsys_k is None:
+        return {"available": False, "reason": "no Tsys on the calibration epoch (run sky/ground)"}
+    try:
+        channel_bw_hz, integration_s = _dsp_params(capture)
+    except FileNotFoundError:
+        return {"available": False, "reason": "capture file missing"}
+    if integration_s <= 0.0:
+        return {"available": False, "reason": "no integration time recorded"}
+    estimate = radiometer_estimate(
+        tsys_k=epoch.tsys_k, channel_bw_hz=channel_bw_hz, integration_s=integration_s
+    )
+    return {"available": True, **estimate}
+
+
+@router.get("/api/captures/{capture_id}/radiometer")
+def api_capture_radiometer(session: SessionDep, capture_id: int) -> dict[str, Any]:
+    """The radiometer-equation estimate for a capture (roadmap M12): the theoretical
+    noise floor ΔT_rms, the predicted SNR of an assumed HI line, and the integration
+    time to reach SNR 5 — from the capture's Tsys (M10 sky/ground cal), per-channel
+    bandwidth, and integration time. An advisory ESTIMATE that rides alongside the
+    classifier's empirical SNR — never a detection verdict. Returns
+    ``{"available": false, "reason": ...}`` when Tsys/integration is missing."""
+    capture = get_or_404(session, Capture, capture_id)
+    _require_npz(capture)
+    return _radiometer_for_capture(session, capture)
+
+
+def _load_power_db(capture: Capture) -> np.ndarray:
+    """The capture's ``(n_frames, n_fft)`` power_db array; 404 if the file is gone."""
+    try:
+        with np.load(Path(capture.path), allow_pickle=False) as data:
+            return np.asarray(data["power_db"], dtype=np.float64)
+    except FileNotFoundError:
+        raise HTTPException(
+            status_code=404, detail=f"capture file missing: {capture.path}"
+        ) from None
+
+
+@router.get("/api/captures/{capture_id}/noise")
+def api_capture_noise(session: SessionDep, capture_id: int) -> dict[str, Any]:
+    """The capture's total-power noise diagnostic (roadmap M12): the per-frame
+    power distribution's Gaussian fit (mean/sigma), skew, excess kurtosis, and a
+    non_gaussian flag — a departure from Gaussian is an RFI/saturation tell. A
+    diagnostic, not a verdict. 422 for a single-frame capture (needs ≥3 frames)."""
+    capture = get_or_404(session, Capture, capture_id)
+    _require_npz(capture)
+    try:
+        return power_distribution(_load_power_db(capture)).stats()
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
+
+
+@router.get("/api/captures/{capture_id}/power_histogram.png")
+def api_capture_power_histogram(
+    request: Request, session: SessionDep, capture_id: int
+) -> FileResponse:
+    """The total-power histogram + Gaussian fit PNG (roadmap M12)."""
+    capture = get_or_404(session, Capture, capture_id)
+    _require_npz(capture)
+    try:
+        dist = power_distribution(_load_power_db(capture))
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
+    out = Path(request.app.state.settings.data_dir) / "plots" / f"capture-{capture_id}-noise.png"
+    total_power_histogram_figure(
+        dist, out, title=f"Capture {capture_id} — total-power distribution"
+    )
+    return FileResponse(out, media_type="image/png")
+
+
+def _overlay_for_capture(session: Session, capture: Capture, data_dir: str) -> dict[str, Any]:
+    """Observed spectrum on a v_LSR axis + the reference HI model overlay (roadmap M12).
+
+    ``{"available": False, "reason": ...}`` when there is no pointing (can't know the
+    galactic direction) or no model was obtained (offline / off-survey). The model is
+    a visual aid, never a verdict."""
+    pointing = _pointing_context(session, capture)
+    if pointing is None:
+        return {"available": False, "reason": "needs a linked observation (pointing + time)"}
+    coord, location, when = pointing
+    freq_hz, power_db = _averaged(capture)
+    velocity = vlsr_axis(
+        freq_hz, coord, location.lat_deg, location.lon_deg, location.elevation_m, when
+    )
+    gal = coord.galactic
+    l_deg, b_deg = float(gal.l.deg), float(gal.b.deg)
+    observed = {"v_lsr_kms": velocity.tolist(), "power_db": power_db.tolist()}
+    model = reference_profile(
+        l_deg, b_deg, provider="web", cache_dir=str(Path(data_dir) / "hi_reference")
+    )
+    if model is None:
+        return {
+            "available": False,
+            "reason": "no reference model for this direction (offline or off-survey)",
+            "l_deg": l_deg,
+            "b_deg": b_deg,
+            "observed": observed,
+        }
+    return {
+        "available": True,
+        "l_deg": l_deg,
+        "b_deg": b_deg,
+        "observed": observed,
+        "model": {
+            "source": model.source,
+            "v_lsr_kms": model.v_lsr_kms.tolist(),
+            "t_b_k": model.t_b_k.tolist(),
+            "peak_t_b_k": model.peak_t_b_k,
+        },
+    }
+
+
+@router.get("/api/captures/{capture_id}/overlay")
+def api_capture_overlay(request: Request, session: SessionDep, capture_id: int) -> dict[str, Any]:
+    """The observed spectrum + a reference HI-survey model overlay (roadmap M12).
+
+    Returns the observed spectrum on a v_LSR axis and the expected LAB profile for
+    the capture's galactic direction (a shape comparison — observed is relative
+    power). ``{"available": false, "reason": ...}`` when there's no pointing or no
+    model (offline / off-survey). A visual aid, NOT a detection verdict."""
+    capture = get_or_404(session, Capture, capture_id)
+    _require_npz(capture)
+    return _overlay_for_capture(session, capture, request.app.state.settings.data_dir)
+
+
+@router.get("/api/captures/{capture_id}/overlay.png")
+def api_capture_overlay_png(request: Request, session: SessionDep, capture_id: int) -> FileResponse:
+    """The observed-vs-reference-model overlay PNG (roadmap M12). 409 when no model
+    is available (offline / off-survey / no pointing)."""
+    capture = get_or_404(session, Capture, capture_id)
+    _require_npz(capture)
+    overlay = _overlay_for_capture(session, capture, request.app.state.settings.data_dir)
+    if not overlay["available"]:
+        raise HTTPException(status_code=409, detail=overlay["reason"])
+    observed, model = overlay["observed"], overlay["model"]
+    out = Path(request.app.state.settings.data_dir) / "plots" / f"capture-{capture_id}-overlay.png"
+    profile_overlay_figure(
+        np.asarray(observed["v_lsr_kms"]),
+        np.asarray(observed["power_db"]),
+        np.asarray(model["v_lsr_kms"]),
+        np.asarray(model["t_b_k"]),
+        out,
+        title=f"Capture {capture_id} — observed vs {model['source']} model",
+        model_source=model["source"],
+    )
+    return FileResponse(out, media_type="image/png")
 
 
 @router.get("/api/captures/{capture_id}/spectrum")

@@ -209,6 +209,22 @@
     <p class="caption">Waterfall — power (dB), time increasing downward.</p>
   </div>
   {% endif %}
+  {% if entry.histogram_uri %}
+  <div class="figure-block">
+    <img class="report-figure" src="{{ entry.histogram_uri }}" alt="total-power distribution">
+    <p class="caption">Total-power distribution + Gaussian fit — a non-Gaussian tail flags RFI/saturation (roadmap M12).</p>
+  </div>
+  {% endif %}
+  {% if entry.radiometer %}
+  <p class="caption">
+    <b>Radiometer estimate</b> (roadmap M12, not a verdict): noise floor ΔT<sub>rms</sub> =
+    {{ "%.1f"|format(entry.radiometer.delta_t_rms_mk) }} mK from T<sub>sys</sub>
+    {{ "%.0f"|format(entry.radiometer.tsys_k) }} K over {{ "%.0f"|format(entry.radiometer.integration_s) }} s;
+    predicted SNR ≈ {{ "%.1f"|format(entry.radiometer.predicted_snr) }} on a
+    {{ "%.0f"|format(entry.radiometer.assumed_line_k) }} K line
+    (≈ {{ "%.0f"|format(entry.radiometer.time_to_target_s) }} s to reach SNR {{ "%.0f"|format(entry.radiometer.target_snr) }}).
+  </p>
+  {% endif %}
 </section>
 {% endif %}
 {% endfor %}

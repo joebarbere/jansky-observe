@@ -6,6 +6,42 @@ milestones**). Work that landed outside a milestone gets a brief summary under t
 that shipped it. Maintained as part of `/release` — a release isn't finished until its
 section exists here.
 
+## v0.13.0 — 2026-07-17 — M12 "Model overlay, radiometer SNR & noise diagnostics"
+
+Milestone M12 (`plans/m12-model-overlay-and-radiometer.md`): closes the three graph-output gaps a
+comparison against [Virgo](https://github.com/0xCoto/Virgo) surfaced. All three are **advisory
+analysis, never verdicts** — the quantitative model cross-check stays deferred to jansky-research
+plan 78 (plan §6). **No schema change** (`user_version` stays **14**); **no `install.sh`/`OS_IMAGE`
+change ⇒ no QEMU gate**; the SDR/capture path and bias-tee invariant are untouched; the one new
+external call is a best-effort, cached, network-free-in-tests reference fetch.
+
+- **Radiometer-equation sensitivity** (`confirm/radiometer.py`): `radiometer_estimate` gives the
+  theoretical noise floor `ΔT_rms = Tsys/√(Δν·τ)`, the predicted SNR of an assumed HI line, and the
+  integration time to reach SNR 5 — from the M10 sky/ground **Tsys**, the per-channel bandwidth, and
+  the integration time. Turns a non-detection into an honest "under-integrated vs. genuinely absent"
+  call. `GET /api/captures/{id}/radiometer` (`{available:false, reason}` without Tsys) + read-only
+  `get_radiometer_estimate` MCP tool.
+- **Total-power noise diagnostic** (`confirm/noise.py`): `power_distribution` reduces a capture's
+  frames to their band-power distribution + a Gaussian fit + a **non-Gaussianity flag** (skew /
+  excess kurtosis beyond threshold — an RFI/saturation tell; clean thermal noise is Gaussian).
+  `GET /api/captures/{id}/noise` + a histogram PNG at `/power_histogram.png`.
+- **Reference HI model overlay** (`astro/hi_reference.py` + `export/figures.py::profile_overlay_figure`):
+  the expected 21 cm LAB profile for a capture's galactic direction drawn on the observed v_LSR
+  spectrum — a **shape** comparison (observed is relative power) with a "visual aid, not a verdict"
+  caption. The `reference_profile` client is **pluggable**: `provider="web"` (best-effort fetch from
+  the LAB EU-HOU tool — the same source Virgo's `simulate()` uses — cached to disk, degrades to
+  "model unavailable" offline) or `provider="file"` (a profile supplied by **jansky-research plan
+  78's tool** — the cross-repo seam). `GET /api/captures/{id}/overlay` + `/overlay.png` (409 when no
+  model) + read-only `get_hi_model_overlay` MCP tool.
+- **Surfaced**: the observation detail page's capture cell gains "model overlay · noise histogram ·
+  radiometer" links; the **PDF report** embeds the histogram + a radiometer summary line per capture
+  (network-free — the overlay stays live-only); the **observation bundle** manifest gains a
+  per-capture `radiometer` provenance block. MCP surface **25 → 27 tools**, all read-only.
+
+Scope notes: **N_HI column density** stays parked (needs absolute K/flux calibration); a **FITS
+exporter** and the **all-sky-HI pointing map** are fast-follows; **pulsar/dedispersion** is
+consciously out of scope (a hydrogen-line station is a different instrument).
+
 ## v0.12.0 — 2026-07-17 — M11 "HI mapping — raster & drift sky maps"
 
 Milestone M11 (`plans/m11-hi-mapping.md`): the "can I make images with the dish?" answer — turn a

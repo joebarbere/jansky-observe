@@ -22,9 +22,16 @@ from matplotlib.patches import Circle  # noqa: E402
 from jansky_observe.astro.lsr import vlsr_axis  # noqa: E402
 from jansky_observe.confirm.classifier import averaged_spectrum  # noqa: E402
 from jansky_observe.confirm.mapping import GriddedMap  # noqa: E402
+from jansky_observe.confirm.noise import PowerDistribution  # noqa: E402
 from jansky_observe.confirm.plots import dual_axis_plot  # noqa: E402
 
-__all__ = ["profile_figure", "sky_map_figure", "waterfall_figure"]
+__all__ = [
+    "profile_figure",
+    "profile_overlay_figure",
+    "sky_map_figure",
+    "total_power_histogram_figure",
+    "waterfall_figure",
+]
 
 _DPI = 120
 
@@ -94,6 +101,139 @@ def profile_figure(
     ax.plot(freq_hz / 1e6, power_db, color="tab:blue", lw=0.9)
     ax.set_xlabel("Topocentric frequency (MHz)")
     ax.set_ylabel("Power (dB)")
+    fig.tight_layout()
+    out = Path(out_png)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(out, dpi=_DPI)
+    plt.close(fig)
+    return out
+
+
+def profile_overlay_figure(
+    v_lsr_kms: np.ndarray,
+    observed_power_db: np.ndarray,
+    model_v_lsr_kms: np.ndarray,
+    model_t_b_k: np.ndarray,
+    out_png: str | Path,
+    *,
+    title: str | None = None,
+    model_source: str = "LAB",
+) -> Path:
+    """Overlay a reference HI model on the observed spectrum (roadmap M12).
+
+    The observed averaged spectrum (relative dB) is drawn against v_LSR on the left
+    axis; the reference model brightness temperature (K) shares the v_LSR axis on an
+    independent right axis — a **shape** comparison (same velocity? similar width?),
+    since the observed spectrum is relative until absolute calibration. Carries a
+    "visual aid, not a detection verdict" caption; verdicts come only from the
+    deterministic classifiers (plan §12.5).
+
+    Parameters
+    ----------
+    v_lsr_kms, observed_power_db : numpy.ndarray
+        The observed spectrum's v_LSR axis (km/s) and power (dB).
+    model_v_lsr_kms, model_t_b_k : numpy.ndarray
+        The reference model's velocity axis (km/s) and brightness temperature (K).
+    out_png : str or Path
+        Destination PNG path (parent directories are created).
+    title : str, optional
+        Figure title.
+    model_source : str
+        Survey name for the legend (e.g. "LAB").
+
+    Returns
+    -------
+    Path
+        The written file's path.
+    """
+    fig, ax = plt.subplots(figsize=(9, 5))
+    ax.plot(v_lsr_kms, observed_power_db, color="tab:blue", lw=0.9, label="observed (this station)")
+    ax.set_xlabel("v_LSR (km/s)")
+    ax.set_ylabel("Observed power (dB, relative)", color="tab:blue")
+    ax.tick_params(axis="y", labelcolor="tab:blue")
+
+    model_ax = ax.twinx()
+    model_ax.plot(
+        model_v_lsr_kms,
+        model_t_b_k,
+        color="tab:red",
+        lw=1.4,
+        ls="--",
+        label=f"{model_source} model",
+    )
+    model_ax.set_ylabel(f"{model_source} brightness temp (K)", color="tab:red")
+    model_ax.tick_params(axis="y", labelcolor="tab:red")
+
+    lines = ax.get_lines() + model_ax.get_lines()
+    ax.legend(lines, [str(ln.get_label()) for ln in lines], loc="upper right", fontsize=8)
+    ax.set_title(title or "Observed spectrum vs reference HI model")
+    fig.text(
+        0.5,
+        0.01,
+        f"{model_source} reference model — shape comparison only (observed is relative power); "
+        "a visual aid, not a detection verdict",
+        ha="center",
+        fontsize=7.5,
+        color="#555555",
+    )
+    fig.tight_layout(rect=(0, 0.03, 1, 1))
+
+    out = Path(out_png)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(out, dpi=_DPI)
+    plt.close(fig)
+    return out
+
+
+def total_power_histogram_figure(
+    dist: PowerDistribution,
+    out_png: str | Path,
+    *,
+    title: str | None = None,
+) -> Path:
+    """Render a capture's total-power distribution + Gaussian fit (roadmap M12).
+
+    A histogram of the per-frame band-mean power with the fitted Gaussian
+    (``mean``/``sigma``) overlaid, annotated with skew/excess-kurtosis and the
+    non-Gaussianity flag (a departure from Gaussian is an RFI/saturation tell).
+
+    Parameters
+    ----------
+    dist : PowerDistribution
+        From :func:`jansky_observe.confirm.noise.power_distribution`.
+    out_png : str or Path
+        Destination PNG path (parent directories are created).
+    title : str, optional
+        Figure title.
+
+    Returns
+    -------
+    Path
+        The written file's path.
+    """
+    series = np.asarray(dist.series, dtype=np.float64)
+    fig, ax = plt.subplots(figsize=(8, 5))
+    bins = max(10, min(50, dist.n_frames // 4))
+    ax.hist(series, bins=bins, density=True, color="tab:blue", alpha=0.6, label="per-frame power")
+    if dist.sigma > 0:
+        xs = np.linspace(series.min(), series.max(), 200)
+        gauss = np.exp(-0.5 * ((xs - dist.mean) / dist.sigma) ** 2) / (
+            dist.sigma * np.sqrt(2 * np.pi)
+        )
+        ax.plot(xs, gauss, color="tab:red", lw=1.6, label="Gaussian fit")
+    flag = "NON-GAUSSIAN (RFI/saturation?)" if dist.non_gaussian else "Gaussian ✓"
+    ax.set_title(title or f"Total-power distribution — {flag}")
+    ax.set_xlabel("Per-frame band-mean power (linear)")
+    ax.set_ylabel("Density")
+    ax.legend(loc="upper right", fontsize=8)
+    ax.annotate(
+        f"skew {dist.skew:+.2f}   excess kurtosis {dist.excess_kurtosis:+.2f}   n={dist.n_frames}",
+        (0.02, 0.97),
+        xycoords="axes fraction",
+        va="top",
+        fontsize=8,
+        color="#555555",
+    )
     fig.tight_layout()
     out = Path(out_png)
     out.parent.mkdir(parents=True, exist_ok=True)
