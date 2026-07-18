@@ -32,6 +32,7 @@ from sqlmodel import Session, col, select
 from jansky_observe import __version__
 from jansky_observe.astro.pointing import local_sidereal_time_hours
 from jansky_observe.confirm.classifier import averaged_spectrum
+from jansky_observe.confirm.radiometer import radiometer_estimate
 from jansky_observe.models import (
     CalibrationEpoch,
     Capture,
@@ -79,6 +80,36 @@ def _capture_has_spectrum(capture: Capture) -> bool:
     )
 
 
+def _radiometer_block(
+    capture: Capture, cal_epoch: CalibrationEpoch | None
+) -> dict[str, Any] | None:
+    """The radiometer estimate for a capture (roadmap M12), or ``None``.
+
+    Best-effort provenance: needs an M10 Tsys on the epoch and a readable npz for
+    the bandwidth/integration; any gap → ``None`` (never raises into the manifest).
+    An estimate, not a verdict."""
+    if cal_epoch is None or cal_epoch.tsys_k is None or not _capture_has_spectrum(capture):
+        return None
+    try:
+        with np.load(Path(capture.path), allow_pickle=False) as data:
+            power_db = np.asarray(data["power_db"], dtype=np.float64)
+            sample_rate_hz = float(data["sample_rate_hz"])
+            timestamps = np.asarray(data.get("timestamps", []), dtype=np.float64)
+        n_fft = power_db.shape[1] if power_db.ndim == 2 else power_db.shape[0]
+        integration_s = float(timestamps[-1] - timestamps[0]) if timestamps.size > 1 else 0.0
+        if integration_s <= 0.0 and capture.start is not None and capture.end is not None:
+            integration_s = max((capture.end - capture.start).total_seconds(), 0.0)
+        if integration_s <= 0.0:
+            return None
+        return radiometer_estimate(
+            tsys_k=cal_epoch.tsys_k,
+            channel_bw_hz=sample_rate_hz / n_fft,
+            integration_s=integration_s,
+        )
+    except Exception:  # noqa: BLE001 — provenance is best-effort; degrade to None
+        return None
+
+
 def _capture_block(
     session: Session, capture: Capture, lon_deg: float, az_el: tuple[float | None, float | None]
 ) -> dict[str, Any]:
@@ -115,6 +146,9 @@ def _capture_block(
             if cal_epoch is not None
             else None
         ),
+        # Radiometer-equation estimate (roadmap M12) when Tsys is available — an
+        # estimate that contextualises the empirical classifier SNR, not a verdict.
+        "radiometer": _radiometer_block(capture, cal_epoch),
         "campaign_id": capture.campaign_id,
         "sidereal_day": capture.sidereal_day,
         "classifier_results": [

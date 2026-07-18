@@ -1,4 +1,4 @@
-# jansky-observe roadmap after v0.6 — M6–M11 and the follow-up list
+# jansky-observe roadmap after v0.6 — M6–M12 and the follow-up list
 
 Companion to `plans/jansky_observe.md` (which defines M0–M5, all shipped, and the v1.0.0
 gate). This document organizes everything queued after feature-complete into milestones
@@ -15,12 +15,13 @@ on a v0.6.x-or-later install*.
 | v0.10.0 | M9 | Rotator — Discovery Drive support (shipped as v0.10.0, not the v1.1.0 this table first guessed) |
 | v0.11.0/.1 | M10 | Position switching (ON/OFF) & sky/ground Tsys — spec `plans/m10-onoff-and-skyground.md` |
 | v0.12.0 | M11 | HI mapping — raster & drift sky maps — spec `plans/m11-hi-mapping.md` |
+| v0.13.0 | M12 | Model overlay, radiometer SNR & noise diagnostics — spec `plans/m12-model-overlay-and-radiometer.md` |
 | v1.0.0 | — | Unchanged: tagged after one real campaign, from whatever v0.x is current |
 
 M9 shipped ahead of the v1.0.0 campaign, so the whole post-M8 line renumbered onto the v0.x
-track (M9 = v0.10.0, M10 = v0.11.0, M11 = v0.12.0); v1.0.0 stays the campaign gate, not a
-feature. M10 and M11 each carry a standalone spec file (linked above) rather than a section
-here — this document's detailed sections cover M6–M9.
+track (M9 = v0.10.0, M10 = v0.11.0, M11 = v0.12.0, M12 = v0.13.0); v1.0.0 stays the campaign
+gate, not a feature. M10, M11, and M12 each carry a standalone spec file (linked above) rather
+than a section here — this document's detailed sections cover M6–M9.
 
 ---
 
@@ -211,7 +212,7 @@ Closes the ON/OFF and Tsys gaps the beginner HI runbook surfaced. Full spec and 
 schema 12) and v0.11.1 (sky/ground ΔdB + Tsys on the calibration epoch, schema 13). Read-and-reduce
 only; no capture/SDR/bias-tee change; one read-only MCP tool (→ 23).
 
-## M11 — v0.12.0 "HI mapping — raster & drift sky maps" — proposed
+## M11 — v0.12.0 "HI mapping — raster & drift sky maps" — shipped
 
 The "can I image with the dish?" answer: turn a set of pointed captures (a rotator-driven raster
 grid **or** ingested M7 drift passes) into a coarse 2-D map of galactic HI intensity / v_LSR /
@@ -219,7 +220,20 @@ total power — beam-limited to the ~21° HPBW, and labelled as such. Promotes t
 sky maps* follow-up (plan §11) now that M9 can drive a grid. Full spec: **`plans/m11-hi-mapping.md`**.
 Read-and-reduce + a raster runner that moves hardware only through M9's already-guarded `slew`
 primitive (no new device path, no new mutating MCP verb, no `install.sh` change ⇒ no QEMU gate);
-schema 13 → 14. Not yet scheduled.
+schema 13 → 14. Shipped v0.12.0.
+
+## M12 — v0.13.0 "Model overlay, radiometer SNR & noise diagnostics" — proposed
+
+Closes the three graph-output gaps a comparison against [Virgo](https://github.com/0xCoto/Virgo)
+surfaced: a **reference HI-profile overlay** (the expected 21 cm profile from the LAB/HI4PI survey
+drawn on your spectrum — the visual half of the deferred `hi4pi_xcheck`), a **radiometer-equation
+SNR / time-to-detect** (nearly free now that M10 put Tsys in the app), and a **total-power histogram
++ Gaussian fit** (an RFI/saturation noise diagnostic). All three are **advisory analysis, never
+verdicts** — the quantitative model cross-check stays deferred to jansky-research plan 78; a
+pluggable `hi_reference` provider (best-effort LAB web fetch **or** a plan-78-supplied profile) is
+the cross-repo seam. Full spec: **`plans/m12-model-overlay-and-radiometer.md`**. Read-and-reduce +
+one best-effort cached network fetch; **no schema change** (`user_version` stays 14), **no
+`install.sh`/`OS_IMAGE` change ⇒ no QEMU gate**, read-only MCP only. Not yet scheduled.
 
 ---
 
