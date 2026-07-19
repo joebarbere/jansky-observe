@@ -6,6 +6,19 @@ milestones**). Work that landed outside a milestone gets a brief summary under t
 that shipped it. Maintained as part of `/release` — a release isn't finished until its
 section exists here.
 
+## v0.13.2 — 2026-07-18 — Waterfall time axis (UTC)
+
+Patch fix between milestones. **No schema change** (`user_version` stays **14**); **no
+`install.sh`/`OS_IMAGE` change ⇒ no QEMU gate**; static-asset only (the live-view UI), and the
+SDR/capture path is untouched.
+
+- **Absolute-UTC time axis on the waterfall** (`server/static/waterfall.js`): the waterfall's
+  vertical axis is time but was unlabelled. Each row now carries its capture `timestamp` (already
+  present in every frame header — no schema or capture-daemon change), scrolled in lockstep with the
+  pixels, and the left gutter freed by the v0.13.1 spectrum alignment now shows nice-stepped **UTC
+  HH:MM:SS** gridlines. Tick positions are located from the real per-row timestamps, so dropped
+  frames read as honest time gaps rather than an assumed-uniform axis.
+
 ## v0.13.1 — 2026-07-18 — Waterfall/spectrum axis alignment
 
 Patch fix between milestones. **No schema change** (`user_version` stays **14**); **no
