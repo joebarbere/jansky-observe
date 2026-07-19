@@ -237,13 +237,19 @@
   function drawWaterfall() {
     const w = wfCanvas.width;
     const h = wfCanvas.height;
+    const dpr = window.devicePixelRatio || 1;
+    const left = MARGIN.left * dpr;
+    const right = MARGIN.right * dpr;
+    const pw = w - left - right;
     wfCtx.fillStyle = THEME.wfBg;
     wfCtx.fillRect(0, 0, w, h);
-    if (!off.canvas || off.rows === 0) return;
+    if (!off.canvas || off.rows === 0 || pw <= 0) return;
     wfCtx.imageSmoothingEnabled = false;
-    // Vertical is 1:1 (off.height === h in steady state), so a row never resamples
-    // as it scrolls; only the fixed horizontal n_fft->width scale applies.
-    wfCtx.drawImage(off.canvas, 0, 0, off.nfft, off.height, 0, 0, w, h);
+    // Draw into the same [left, w-right] box the spectrum uses so the two
+    // frequency axes line up; the left gutter sits under the spectrum's dB
+    // scale. Vertical is 1:1 (off.height === h in steady state), so a row
+    // never resamples as it scrolls; only the fixed n_fft->pw scale applies.
+    wfCtx.drawImage(off.canvas, 0, 0, off.nfft, off.height, left, 0, pw, h);
   }
 
   // ---- spectrum ------------------------------------------------------------
