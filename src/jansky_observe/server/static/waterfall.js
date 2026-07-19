@@ -303,24 +303,33 @@
       return yOfRow(lo + frac);
     };
 
-    const step = niceTimeStep(span, 5);
-    wfCtx.strokeStyle = THEME.grid;
+    // Choose the step from the *eventual full* window (cadence × row capacity),
+    // not the partially-filled span — so it stays constant while the waterfall
+    // fills instead of stepping 1s→5s→15s and reflowing every frame. Round UTC
+    // ticks then scroll smoothly downward with the data; labels live in the
+    // gutter only, with NO lines drawn across the waterfall.
+    const avgDt = span / (n - 1);
+    const fullSpan = Math.max(span, avgDt * off.height);
+    const step = niceTimeStep(fullSpan, 6);
+
     wfCtx.fillStyle = THEME.label;
+    wfCtx.strokeStyle = THEME.grid;
     wfCtx.lineWidth = 1;
     wfCtx.font = 10 * dpr + "px monospace";
     wfCtx.textAlign = "right";
     wfCtx.textBaseline = "middle";
-    for (let t = Math.ceil(tOld / step) * step; t <= tNew; t += step) {
-      const y = yOfTime(t);
-      wfCtx.save();
-      wfCtx.globalAlpha = 0.3; // faint line so the ticks never bury the data
-      wfCtx.beginPath();
-      wfCtx.moveTo(left, y);
-      wfCtx.lineTo(w - right, y);
+    const minGap = 14 * dpr; // keep labels from overlapping (belt-and-suspenders)
+    let lastY = -Infinity;
+    for (let t = Math.ceil(tOld / step) * step; t <= tNew + 1e-6; t += step) {
+      const y = Math.round(yOfTime(t));
+      if (y < 7 * dpr || y > h - 4 * dpr) continue; // skip ticks at the very edges
+      if (Math.abs(y - lastY) < minGap) continue; // ticks run bottom→top, so |Δy|
+      lastY = y;
+      wfCtx.beginPath(); // a short tick in the gutter — never across the data
+      wfCtx.moveTo(left - 3 * dpr, y);
+      wfCtx.lineTo(left, y);
       wfCtx.stroke();
-      wfCtx.restore();
-      const ly = Math.min(Math.max(y, 7 * dpr), h - 3 * dpr); // keep label on-canvas
-      wfCtx.fillText(fmtUtc(t, step), left - 4 * dpr, ly);
+      wfCtx.fillText(fmtUtc(t, step), left - 4 * dpr, y);
     }
   }
 
