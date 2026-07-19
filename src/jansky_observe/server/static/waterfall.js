@@ -193,6 +193,9 @@
     next.width = nfft;
     next.height = height;
     const nctx = next.getContext("2d");
+    // Per-row capture timestamps (unix seconds UTC), parallel to the pixel rows:
+    // index 0 is the newest row (y = 0). Drives the vertical time axis.
+    const nextTimes = new Float64Array(height);
     let rows = 0;
     if (off.canvas && off.nfft === nfft && off.rows > 0) {
       // A resize (only the height changed): carry the existing rows over 1:1 — copy
@@ -203,18 +206,20 @@
       nctx.imageSmoothingEnabled = false;
       const keep = Math.min(off.height, height, off.rows);
       nctx.drawImage(off.canvas, 0, 0, nfft, keep, 0, 0, nfft, keep);
+      if (off.times) nextTimes.set(off.times.subarray(0, keep));
       rows = keep;
     }
     // (An n_fft / stream-parameter change can't be carried over, so that path starts
     // fresh with rows = 0.)
     off.canvas = next;
     off.ctx = nctx;
+    off.times = nextTimes;
     off.nfft = nfft;
     off.height = height;
     off.rows = rows;
   }
 
-  function pushRow(power) {
+  function pushRow(power, timestamp) {
     ensureHistory(power.length, wfCanvas.height);
     const H = off.height;
     // Scroll history down one pixel (newest row lives at y = 0).
@@ -231,7 +236,25 @@
       px[i * 4 + 3] = 255;
     }
     off.ctx.putImageData(row, 0, 0);
+    // Scroll the row timestamps down in lockstep with the pixels; the new row's
+    // capture time goes to index 0 (y = 0). Falls back to arrival time if a frame
+    // ever lacks a timestamp.
+    off.times.copyWithin(1, 0, H - 1);
+    off.times[0] = typeof timestamp === "number" ? timestamp : Date.now() / 1000;
     if (off.rows < H) off.rows++;
+  }
+
+  // Nice round step (seconds) for the vertical time axis, aiming for <= maxTicks ticks.
+  function niceTimeStep(span, maxTicks) {
+    const steps = [1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 900, 1800, 3600, 7200];
+    for (const s of steps) if (span / s <= maxTicks) return s;
+    return steps[steps.length - 1];
+  }
+
+  // Format a unix-seconds UTC time: HH:MM:SS for sub-minute steps, else HH:MM.
+  function fmtUtc(t, step) {
+    const iso = new Date(t * 1000).toISOString(); // YYYY-MM-DDTHH:MM:SS.sssZ
+    return step < 60 ? iso.slice(11, 19) : iso.slice(11, 16);
   }
 
   function drawWaterfall() {
@@ -250,6 +273,55 @@
     // scale. Vertical is 1:1 (off.height === h in steady state), so a row
     // never resamples as it scrolls; only the fixed n_fft->pw scale applies.
     wfCtx.drawImage(off.canvas, 0, 0, off.nfft, off.height, left, 0, pw, h);
+
+    // ---- vertical time axis (absolute UTC), labelled in the left gutter ----
+    const n = Math.min(off.rows, off.height);
+    if (n < 2) return;
+    const tNew = off.times[0]; // newest row, top (y ~ 0)
+    const tOld = off.times[n - 1]; // oldest visible row, bottom
+    const span = tNew - tOld; // seconds of history currently shown
+    if (!(span > 0.5)) return;
+
+    // Visible y for an off-canvas row index (off.height maps onto h).
+    const yOfRow = (i) => (i / off.height) * h;
+    // Visible y for an absolute time, located from the real per-row timestamps
+    // (monotonically decreasing with index) so dropped-frame gaps read honestly
+    // instead of being smoothed over by an assumed uniform cadence.
+    const yOfTime = (t) => {
+      if (t >= tNew) return yOfRow(0);
+      if (t <= tOld) return yOfRow(n - 1);
+      let lo = 0;
+      let hi = n - 1;
+      while (hi - lo > 1) {
+        const mid = (lo + hi) >> 1;
+        if (off.times[mid] >= t) lo = mid;
+        else hi = mid;
+      }
+      const t0 = off.times[lo];
+      const t1 = off.times[hi];
+      const frac = t0 === t1 ? 0 : (t0 - t) / (t0 - t1);
+      return yOfRow(lo + frac);
+    };
+
+    const step = niceTimeStep(span, 5);
+    wfCtx.strokeStyle = THEME.grid;
+    wfCtx.fillStyle = THEME.label;
+    wfCtx.lineWidth = 1;
+    wfCtx.font = 10 * dpr + "px monospace";
+    wfCtx.textAlign = "right";
+    wfCtx.textBaseline = "middle";
+    for (let t = Math.ceil(tOld / step) * step; t <= tNew; t += step) {
+      const y = yOfTime(t);
+      wfCtx.save();
+      wfCtx.globalAlpha = 0.3; // faint line so the ticks never bury the data
+      wfCtx.beginPath();
+      wfCtx.moveTo(left, y);
+      wfCtx.lineTo(w - right, y);
+      wfCtx.stroke();
+      wfCtx.restore();
+      const ly = Math.min(Math.max(y, 7 * dpr), h - 3 * dpr); // keep label on-canvas
+      wfCtx.fillText(fmtUtc(t, step), left - 4 * dpr, ly);
+    }
   }
 
   // ---- spectrum ------------------------------------------------------------
@@ -384,7 +456,7 @@
     frameCount++;
     updateRange(frame.power);
     accumulate(frame.header, frame.power);
-    pushRow(frame.power);
+    pushRow(frame.power, frame.header.timestamp);
     updateStats(frame.header);
     setStatus("live", "live");
     showOverlay(false);
