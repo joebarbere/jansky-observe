@@ -6,6 +6,20 @@ milestones**). Work that landed outside a milestone gets a brief summary under t
 that shipped it. Maintained as part of `/release` — a release isn't finished until its
 section exists here.
 
+## v0.13.1 — 2026-07-18 — Waterfall/spectrum axis alignment
+
+Patch fix between milestones. **No schema change** (`user_version` stays **14**); **no
+`install.sh`/`OS_IMAGE` change ⇒ no QEMU gate**; the change is static-asset only (the live-view
+UI), and the SDR/capture path is untouched.
+
+- **Waterfall aligned with the spectrum** (`server/static/waterfall.js`): the spectrum insets its
+  plot by the axis margin (left 52 px for the dB scale, right 10 px), mapping the frequency span to
+  `[left, w−right]`, but `drawWaterfall` stretched the FFT across the **full** canvas width — so the
+  same frequency bin sat ~52 px to the left in the waterfall than in the spectrum above it.
+  `drawWaterfall` now draws into the spectrum's exact `[left, w−right]` box, so the two frequency
+  axes line up and the dB scale sits in the shared left gutter (the standard spectrum-over-waterfall
+  SDR layout).
+
 ## v0.13.0 — 2026-07-17 — M12 "Model overlay, radiometer SNR & noise diagnostics"
 
 Milestone M12 (`plans/m12-model-overlay-and-radiometer.md`): closes the three graph-output gaps a
