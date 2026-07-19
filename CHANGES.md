@@ -6,6 +6,20 @@ milestones**). Work that landed outside a milestone gets a brief summary under t
 that shipped it. Maintained as part of `/release` — a release isn't finished until its
 section exists here.
 
+## v0.13.3 — 2026-07-18 — Waterfall time-axis rendering fixes
+
+Patch fix between milestones. **No schema change** (`user_version` stays **14**); **no
+`install.sh`/`OS_IMAGE` change ⇒ no QEMU gate**; static-asset only (the live-view UI).
+
+- **Fix the v0.13.2 waterfall time axis** (`server/static/waterfall.js`): the first cut recomputed a
+  `niceTimeStep` from the partially-filled span every frame and drew full-width gridlines, which
+  produced stacked labels while the buffer filled, horizontal lines across the waterfall, a step
+  that changed as the window grew, and per-frame flicker. Now the step is derived once from the
+  *eventual full* window (cadence × row capacity) so it stays constant; round UTC ticks are placed
+  from the real per-row timestamps and scroll smoothly; an `|Δy|` overlap guard prevents both
+  crowding and under-drawing; and the ticks live in the gutter — no lines across the data. Verified
+  against live station frames by screen-recording the fill→full transition.
+
 ## v0.13.2 — 2026-07-18 — Waterfall time axis (UTC)
 
 Patch fix between milestones. **No schema change** (`user_version` stays **14**); **no
