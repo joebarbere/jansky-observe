@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block title %}RFI view — capture #{{ capture.id }}{% endblock %}
+{% block content %}
+<h1>RFI view — capture #{{ capture.id }}</h1>
+<p class="muted">
+  {{ capture.device }} · {{ capture.path }}
+  {% if capture.start %}· {{ capture.start.strftime("%Y-%m-%d %H:%M:%SZ") }}{% endif %}
+</p>
+
+{# The verdict first: whether the protected band is clean is the question a site survey
+   exists to answer, and burying it under a plot would be answering a different one. #}
+<div class="card {% if protected.covered and protected.clean %}ok{% elif protected.covered %}warn{% endif %}">
+  <h2>1400–1427 MHz</h2>
+  <p><b>{{ protected.summary() }}</b></p>
+  {% for note in protected.notes %}<p class="muted">{{ note }}</p>{% endfor %}
+</div>
+
+<img src="/api/captures/{{ capture.id }}/rfi.png"
+     alt="RFI sweep: power spectrum with mean and peak, and per-bin occupancy"
+     style="max-width:100%;height:auto">
+
+<p class="muted">
+  Top panel: <b>mean</b> and <b>peak</b> power. Where the two separate, the bin is episodic —
+  the gap between them <em>is</em> the intermittency. Bottom panel: the fraction of sweeps in
+  which the bin stood {{ "%.0f"|format(profile.threshold_db) }} dB above the noise floor.
+  Green shading is the protected band.
+</p>
+
+<h2>What was there</h2>
+{% if interferers %}
+<table>
+  <tr>
+    <th>Frequency</th><th>Peak</th><th>Mean</th><th>Occupancy</th>
+    <th>Character</th><th>Band</th>
+  </tr>
+  {% for i in interferers %}
+  <tr>
+    <td>{{ "%.3f"|format(i.freq_hz / 1e6) }} MHz</td>
+    <td>{{ "%.1f"|format(i.max_db) }} dB</td>
+    <td>{{ "%.1f"|format(i.mean_db) }} dB</td>
+    <td>{{ "%.0f"|format(i.occupancy * 100) }}%</td>
+    <td>{{ i.character }}</td>
+    <td>
+      {% if i.allocation %}
+        {{ i.allocation.label }}
+        {% if not i.allocation.authoritative %}<span class="muted"> (verify locally)</span>{% endif %}
+      {% else %}<span class="muted">—</span>{% endif %}
+    </td>
+  </tr>
+  <tr><td colspan="6" class="muted">{{ i.advice() }}</td></tr>
+  {% endfor %}
+</table>
+{% else %}
+<p>Nothing stood above the noise floor anywhere in the swept range.</p>
+{% endif %}
+
+<h2>Reading this</h2>
+{% for line in lines %}<p>{{ line }}</p>{% endfor %}
+<p class="muted">
+  Band labels other than the protected allocation are hints, not authority — allocations are
+  regional and they change. Only ITU Radio Regulations footnote 5.340 (no emissions,
+  1400–1427 MHz) is a global fact.
+</p>
+<p><a href="/api/captures/{{ capture.id }}/rfi">JSON</a> ·
+   <a href="/observations/{{ capture.observation_id }}">observation</a></p>
+{% endblock %}
