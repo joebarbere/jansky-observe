@@ -35,6 +35,7 @@ from sqlmodel import Session, col, select
 from jansky_observe.astro.hi_reference import reference_profile
 from jansky_observe.astro.lsr import vlsr_axis
 from jansky_observe.astro.pointing import sidereal_day_number
+from jansky_observe.capture import rfi as rfi_analysis
 from jansky_observe.confirm.classifier import (
     CLASSIFIER_NAME,
     CLASSIFIER_ONOFF_NAME,
@@ -44,7 +45,7 @@ from jansky_observe.confirm.classifier import (
 )
 from jansky_observe.confirm.noise import power_distribution
 from jansky_observe.confirm.onoff import difference_spectrum
-from jansky_observe.confirm.plots import verdict_plot
+from jansky_observe.confirm.plots import rfi_spectrum_plot, verdict_plot
 from jansky_observe.confirm.radiometer import radiometer_estimate
 from jansky_observe.control import ctl_request
 from jansky_observe.export.figures import profile_overlay_figure, total_power_histogram_figure
@@ -929,6 +930,71 @@ def api_capture_plot(request: Request, session: SessionDep, capture_id: int) -> 
     if not path.is_file():
         raise HTTPException(status_code=404, detail="no verdict plot rendered for this capture yet")
     return FileResponse(path, media_type="image/png")
+
+
+def _require_sweep(capture: Capture) -> None:
+    """RFI analysis only means anything on a hackrf_sweep CSV."""
+    if capture.format != "hackrf_sweep_csv":
+        raise HTTPException(
+            status_code=422,
+            detail=f"capture {capture.id} is {capture.format!r}, not a hackrf_sweep CSV",
+        )
+    if capture.purged_at is not None:
+        raise HTTPException(status_code=410, detail="this capture's file has been purged")
+
+
+def _rfi_plot_path(data_dir: str, capture_id: int) -> Path:
+    return Path(data_dir) / "plots" / f"capture-{capture_id}-rfi.png"
+
+
+def _sweep_profile_or_422(capture: Capture) -> rfi_analysis.SweepProfile:
+    try:
+        return rfi_analysis.sweep_profile(capture.path)
+    except (OSError, ValueError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
+
+
+@router.get("/api/captures/{capture_id}/rfi")
+def api_capture_rfi(session: SessionDep, capture_id: int) -> dict[str, Any]:
+    """Occupancy-aware RFI reduction of a sweep (roadmap: the RFI view).
+
+    Unlike ``summarize_sweep``, which ranks bins by mean power, this keeps how *often* each
+    bin was loud — the property that separates a constant carrier from a satellite pass, and
+    the one a mean throws away.
+    """
+    capture = get_or_404(session, Capture, capture_id)
+    _require_sweep(capture)
+    return rfi_analysis.profile_summary(_sweep_profile_or_422(capture))
+
+
+@router.get("/api/captures/{capture_id}/rfi.png")
+def api_capture_rfi_plot(request: Request, session: SessionDep, capture_id: int) -> FileResponse:
+    """Spectrum + occupancy panels for a sweep, rendered on demand."""
+    capture = get_or_404(session, Capture, capture_id)
+    _require_sweep(capture)
+    out = _rfi_plot_path(request.app.state.settings.data_dir, capture_id)
+    rfi_spectrum_plot(_sweep_profile_or_422(capture), out)
+    return FileResponse(out, media_type="image/png")
+
+
+@router.get("/captures/{capture_id}/rfi", response_class=HTMLResponse)
+def page_capture_rfi(request: Request, session: SessionDep, capture_id: int) -> HTMLResponse:
+    """The RFI view: what this sweep actually saw, and whether 1400-1427 is clean."""
+    capture = get_or_404(session, Capture, capture_id)
+    _require_sweep(capture)
+    profile = _sweep_profile_or_422(capture)
+    found = rfi_analysis.interferers(profile)
+    return TEMPLATES.TemplateResponse(
+        request,
+        "rfi_view.html",
+        {
+            "capture": capture,
+            "profile": profile,
+            "interferers": found,
+            "protected": rfi_analysis.protected_band_report(profile),
+            "lines": rfi_analysis.describe(profile, found),
+        },
+    )
 
 
 @router.get("/api/captures/{capture_id}/difference_plot")

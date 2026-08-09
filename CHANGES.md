@@ -6,6 +6,70 @@ milestones**). Work that landed outside a milestone gets a brief summary under t
 that shipped it. Maintained as part of `/release` — a release isn't finished until its
 section exists here.
 
+## v0.14.0 — 2026-08-09 — The RFI view
+
+**No schema change** (`user_version` stays **14**); no `install.sh`/`OS_IMAGE` change ⇒ no
+QEMU gate. New module + routes + one template.
+
+The station could already *capture* a HackRF sweep and reduce it to its five loudest bins.
+That answers "is something screaming at me" and not much else. This is the view: what the
+sweep actually saw, and whether the band that matters is usable.
+
+### The thing this is for: occupancy
+
+`summarize_sweep` averages every bin across every sweep, and **averaging is the wrong
+reduction for interference** — it destroys the most diagnostic property RFI has, which is how
+*often* it is there.
+
+A bin 10 dB up in 100% of sweeps is a constant carrier: it will be in every integration, it
+will not average away, and it sets a floor you cannot integrate below. A bin 10 dB up in 3%
+of sweeps is bursty — a key fob, a doorbell, a transponder — and it averages to almost
+nothing, then lands in one integration out of thirty and puts a spike in your spectrum you
+spend an evening explaining.
+
+Both average to a similar number. They need completely different responses. The raw
+`hackrf_sweep` CSV records every sweep separately, so the information was already on disk;
+nothing was reading it.
+
+The test that matters demonstrates it: a bursty interferer **inside the protected band**,
+present in 1 sweep out of 10, ranks 15th of 400 bins by mean power and never appears in a
+top-5 — while its peak stands ~18 dB above the floor.
+
+### Added
+- **`capture/rfi.py`** — `read_sweeps` (splits the CSV back into individual sweeps on the
+  frequency wrap), `sweep_profile` (mean, peak **and occupancy** per bin, median noise floor),
+  `interferers` (classified constant / intermittent / bursty, each with advice),
+  `protected_band_report`, `compare_profiles` (occupancy change, complementing
+  `compare_sweeps`'s power change).
+- **`rfi_spectrum_plot`** — two panels. Top: mean and peak together, so the gap between them
+  *is* the intermittency. Bottom: per-bin occupancy. The protected band is shaded in both.
+- **Routes** — `GET /captures/{id}/rfi` (the page), `/api/captures/{id}/rfi` (JSON),
+  `/api/captures/{id}/rfi.png`. Linked from the RFI-sweep button's result and from any
+  `hackrf_sweep_csv` row on an observation's detail page.
+
+### The verdict it leads with
+**Is 1400–1427 MHz clean?** A survey that reports "the loudest thing is GPS at 1575" has
+answered a question nobody asked. What decides whether hydrogen-line work is viable at a site
+is whether anything is inside the protected band — where, under ITU Radio Regulations
+footnote **5.340**, all emissions are prohibited worldwide. Anything there is local to you,
+and therefore findable.
+
+A sweep that does not span the band reports **"says nothing about it"** rather than "clean":
+absence of evidence is not a clean bill of health.
+
+### On band labels
+Only ITU 5.340 is a global fact. Every other allocation here is regional, changes, and is
+labelled a *hint* with "verify locally" shown in the UI — and `allocation_for` returns `None`
+rather than guessing. Confidently mislabelling a spike sends someone hunting the wrong
+transmitter, which is worse than saying "unknown, go and look".
+
+### Notes
+- The noise floor is a **median**, not a mean: a mean floor is dragged upward by strong
+  carriers and then hides everything else, which is the failure mode where a site with one
+  loud transmitter reports itself as quiet. A test pins it.
+- The bias-tee rule is untouched. This module only reads CSVs that `hackrf_sweep` already
+  wrote; nothing here builds a command line.
+
 ## v0.13.3 — 2026-07-18 — Waterfall time-axis rendering fixes
 
 Patch fix between milestones. **No schema change** (`user_version` stays **14**); **no

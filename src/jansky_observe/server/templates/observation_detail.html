@@ -146,7 +146,13 @@
       <td>{{ "%.1f"|format(c.size_bytes / 1e6) }} MB</td>
       <td>{{ c.start | dt }}</td><td>{{ c.end | dt }}</td>
       <td id="cap-confirm-{{ c.id }}">
+        {% if c.format == "hackrf_sweep_csv" %}
+          {% if c.purged_at is none %}
+          <a href="/captures/{{ c.id }}/rfi" title="spectrum, occupancy, and whether 1400-1427 MHz is clean">RFI view</a>
+          {% else %}<span class="muted">files purged</span>{% endif %}
+        {% else %}
         {% with capture = c, results = capture_results.get(c.id, []), pair_off_id = capture_pairs.get(c.id) %}{% include "_capture_results.html" %}{% endwith %}
+        {% endif %}
       </td>
       <td>
         {% if c.purged_at is not none %}

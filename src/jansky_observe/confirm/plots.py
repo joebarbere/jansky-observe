@@ -20,7 +20,7 @@ import numpy.typing as npt  # noqa: E402
 from jansky_observe.confirm.baseline import db_to_linear, fit_baseline, linear_to_db  # noqa: E402
 from jansky_observe.confirm.classifier import ClassifierVerdict  # noqa: E402
 
-__all__ = ["dual_axis_plot", "verdict_plot"]
+__all__ = ["dual_axis_plot", "rfi_spectrum_plot", "verdict_plot"]
 
 _DPI = 120
 _WINDOW_COLOR = "tab:orange"
@@ -145,6 +145,92 @@ def dual_axis_plot(
 
     out = Path(out_path)
     out.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(out, dpi=_DPI)
+    plt.close(fig)
+    return out
+
+
+def rfi_spectrum_plot(profile: object, out_path: str | Path) -> Path:
+    """Render an RFI sweep: spectrum on top, **occupancy** underneath.
+
+    Two panels because a sweep is two facts, and the second one is the one that gets thrown
+    away. The top panel carries mean and peak power together: where they separate, the bin is
+    episodic, and the gap between the two lines *is* the intermittency you would otherwise
+    have to infer.
+
+    The bottom panel is the fraction of sweeps in which each bin stood above the floor. A
+    carrier reads as a full-height bar; a satellite pass or a radar reads as a short one at a
+    frequency whose peak, in the panel above, may be 30 dB up.
+
+    The protected 1400-1427 MHz band is shaded in both panels, because whether anything lives
+    in there is the question the survey exists to answer.
+
+    Duck-typed on the ``SweepProfile`` attributes rather than importing it, to keep the
+    matplotlib import out of :mod:`jansky_observe.capture.rfi` — the same reason
+    ``rfi_sweep_comparison`` avoids importing the ORM.
+    """
+    from jansky_observe.capture.rfi import ALLOCATIONS, PROTECTED_HI_BAND_HZ
+
+    freq_mhz = np.asarray(profile.freq_hz) / 1e6  # type: ignore[attr-defined]
+    mean_db = np.asarray(profile.mean_db)  # type: ignore[attr-defined]
+    max_db = np.asarray(profile.max_db)  # type: ignore[attr-defined]
+    occupancy = np.asarray(profile.occupancy)  # type: ignore[attr-defined]
+    floor_db = float(profile.floor_db)  # type: ignore[attr-defined]
+    threshold_db = float(profile.threshold_db)  # type: ignore[attr-defined]
+    n_sweeps = int(profile.n_sweeps)  # type: ignore[attr-defined]
+
+    fig, (top, bottom) = plt.subplots(
+        2, 1, figsize=(10, 6), sharex=True, gridspec_kw={"height_ratios": [3, 1]}
+    )
+
+    lo_mhz, hi_mhz = PROTECTED_HI_BAND_HZ[0] / 1e6, PROTECTED_HI_BAND_HZ[1] / 1e6
+    for axis in (top, bottom):
+        axis.axvspan(lo_mhz, hi_mhz, color="tab:green", alpha=0.13, zorder=0)
+
+    # Regional hints get a light marker and a label; only the protected band is shaded.
+    for band in ALLOCATIONS:
+        if band.authoritative:
+            continue
+        centre = (band.lo_hz + band.hi_hz) / 2e6
+        if freq_mhz[0] <= centre <= freq_mhz[-1]:
+            top.axvline(centre, color="grey", lw=0.5, ls=":", alpha=0.6, zorder=0)
+
+    top.fill_between(
+        freq_mhz, mean_db, max_db, color="tab:red", alpha=0.25, label="mean-to-peak spread"
+    )
+    top.plot(freq_mhz, max_db, lw=0.7, color="tab:red", label="peak")
+    top.plot(freq_mhz, mean_db, lw=0.9, color="tab:blue", label="mean")
+    top.axhline(floor_db, color="grey", lw=0.8, ls="--", label=f"floor {floor_db:.1f} dB")
+    top.axhline(
+        floor_db + threshold_db,
+        color="grey",
+        lw=0.6,
+        ls=":",
+        label=f"+{threshold_db:.0f} dB threshold",
+    )
+    top.set_ylabel("power (dB)")
+    top.legend(loc="upper right", fontsize="x-small", ncol=2)
+    top.set_title(
+        f"RFI sweep — {n_sweeps} sweeps, {freq_mhz[0]:.0f}-{freq_mhz[-1]:.0f} MHz "
+        f"(shaded: 1400-1427 MHz, ITU 5.340 — no emissions permitted)"
+    )
+    top.grid(alpha=0.25)
+
+    bottom.bar(
+        freq_mhz,
+        occupancy * 100.0,
+        width=(freq_mhz[1] - freq_mhz[0]) if len(freq_mhz) > 1 else 1.0,
+        color="tab:purple",
+        alpha=0.8,
+    )
+    bottom.set_ylim(0, 105)
+    bottom.set_ylabel("occupancy (%)")
+    bottom.set_xlabel("frequency (MHz)")
+    bottom.grid(alpha=0.25)
+
+    out = Path(out_path)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    fig.tight_layout()
     fig.savefig(out, dpi=_DPI)
     plt.close(fig)
     return out

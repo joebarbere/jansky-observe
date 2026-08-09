@@ -45,7 +45,9 @@ If a change seems to require enabling the internal bias tee, it's wrong — stop
     `sources.py` (`SDRSource` protocol + `SyntheticHISource`), `airspy_cli.py` (the real Airspy
     via `airspy_rx` subprocess — bias-tee-guarded, see above), `writer.py` (capture writers:
     `.npz` + SigMF), `dsp.py` (Welch PSD),
-    `profiles.py` (device profiles incl. the bias-tee-guarded `HLINE_AIRSPY`)
+    `profiles.py` (device profiles incl. the bias-tee-guarded `HLINE_AIRSPY`),
+    `hackrf_sweep.py` (the sweep capture + its top-N/before-after reductions),
+    `rfi.py` (**the RFI view**: per-bin *occupancy*, not just mean power)
   - `server/` — FastAPI app: `app.py` (`create_app` / `app`), `cli.py` (entry `jansky-observe`),
     `routers/` (REST CRUD + the session wizard), `templates/`, `static/waterfall.js` (the
     canvas live view)
@@ -279,6 +281,16 @@ tagged v1.0.0 yet), shifting the table.
   env file: each row is an integrated spectrum, so 4 fps is a spectrometer cadence, not a
   render limit. `waterfall.js` adds sub-frame **smooth-scroll interpolation** (rAF loop, EMA
   of the observed frame gap; honors `prefers-reduced-motion`).
+- **The RFI view** (`capture/rfi.py`, `/captures/{id}/rfi`): `summarize_sweep` ranks bins by
+  **mean** power, and averaging destroys the property that matters most about interference —
+  how *often* it is there. A constant carrier and a bursty one average alike and need opposite
+  responses. `sweep_profile` keeps mean, peak **and occupancy** per bin by splitting the CSV
+  back into individual sweeps on the frequency wrap. Its headline output is the
+  **protected-band verdict**: is 1400-1427 MHz (ITU 5.340, no emissions permitted anywhere)
+  clean at this site. A sweep that does not span the band reports "says nothing about it",
+  never "clean". **Band labels other than 5.340 are regional hints marked "verify locally",
+  and `allocation_for` returns `None` rather than guessing** — mislabelling a spike sends
+  someone hunting the wrong transmitter.
 - **RFI-survey template**: a seeded `"RFI survey @ 1420"` ObservationType (migration 5, an
   idempotent reseed) with a before/after checklist that drives the existing HackRF
   `rfi_sweep`. `hackrf_sweep.compare_sweeps` + `rfi_sweep_comparison` reduce the first/last

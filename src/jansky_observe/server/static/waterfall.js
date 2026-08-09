@@ -706,8 +706,14 @@
         top.power_db.toFixed(1) +
         " dB";
     }
-    if (r.capture_id != null) text += " (capture #" + r.capture_id + ")";
     rfiResultEl.textContent = text;
+    if (r.capture_id != null) {
+      // The one-liner answers "did it work"; the view answers "what is out there".
+      const link = document.createElement("a");
+      link.href = "/captures/" + r.capture_id + "/rfi";
+      link.textContent = " — open RFI view (capture #" + r.capture_id + ")";
+      rfiResultEl.appendChild(link);
+    }
     rfiResultEl.classList.remove("hidden");
   }
 
