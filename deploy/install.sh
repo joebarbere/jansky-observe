@@ -58,8 +58,10 @@ BOOT_CONFIG_CANDIDATES=(/boot/firmware/config.txt /boot/config.txt)  # Trixie fi
 # libpango*/fonts: WeasyPrint's system dependencies (PDF reports, M4).
 # sqlite3: the CLI for hand-inspecting /var/lib/jansky-observe/*.sqlite3 when
 # debugging on the Pi (the app uses Python's sqlite3, but Pi OS Lite ships no CLI).
+# smartmontools: smartctl for the diagnostics bundle's NVMe SMART check
+# (server/diagnostics.py degrades to "unavailable" without it).
 APT_DEPS=(curl ca-certificates git libusb-1.0-0 airspy hackrf sqlite3
-    libpango-1.0-0 libpangoft2-1.0-0 fonts-dejavu-core)
+    libpango-1.0-0 libpangoft2-1.0-0 fonts-dejavu-core smartmontools)
 
 # ---------------------------------------------------------------------------
 # Embedded deploy assets (source of truth at install time).
