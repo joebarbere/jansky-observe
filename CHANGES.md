@@ -6,6 +6,37 @@ milestones**). Work that landed outside a milestone gets a brief summary under t
 that shipped it. Maintained as part of `/release` — a release isn't finished until its
 section exists here.
 
+## v0.15.0 — 2026-08-15 — The remote RFI scanner
+
+**No schema change** (`user_version` stays **14**). `install.sh` gained one apt dependency
+(#62) ⇒ the **QEMU install gate ran and passed** before this tag. One new Python dependency
+(`zeroconf`, import- and failure-guarded).
+
+Until now, surveying RFI and observing HI were mutually exclusive: the HackRF had to hang
+off the Pi and `POST /api/rfi_sweep` blocks the capture daemon, pausing the live frame
+stream for the sweep's duration. This release moves the scanner to a second host
+(plans/remote-scanner.md) so the dish integrates continuously while a laptop sweeps.
+
+- **Remote sweep ingest** — `POST /api/remote_scan/sweep` accepts a raw `hackrf_sweep` CSV
+  over HTTP, validates it, persists it under the existing `captures/rfi-*.csv` convention
+  (`-remote` suffix), and registers a `Capture` (device `hackrf-remote`): remote sweeps
+  appear in the v0.14 RFI/occupancy view with zero daemon involvement. Remote provenance
+  (host, antenna, location label) rides in `sdr_settings`.
+- **Presence** — `POST /api/remote_scan/heartbeat` + `GET /api/remote_scan/status` over an
+  in-memory registry (deliberately ephemeral), and a **`scanner` chip in the cockpit bar**:
+  green `scanner <host> · <age>` while connected (last contact < 90 s), amber `lost`
+  otherwise, hidden until a scanner first checks in.
+- **mDNS discovery** — the server advertises `_jansky-observe._tcp.local.` (the scoped-down
+  first slice of the parked v2 multi-station item; advertisement only). Missing zeroconf,
+  no network, or `JANSKY_OBSERVE_NO_MDNS=1` all degrade to "not advertised".
+- **`deploy/remote_scan.py`** — the laptop client: stdlib-only, no install. Resolves the
+  station (`--station` → `$JANSKY_STATION_URL` → mDNS browse → `raspberrypi.local:8000`),
+  heartbeats every 15 s, sweeps and uploads on an interval; `--once` / `--dry-run`. The
+  bias-tee rule extends to it structurally: no parameter can emit `hackrf_sweep -p`, a
+  smuggled `--sweep-arg=-p` is refused, and a guard test mirrors `test_profiles.py`'s.
+- Also shipped: `smartmontools` in the installer's apt deps for the diagnostics bundle's
+  NVMe SMART check (#62).
+
 ## v0.14.0 — 2026-08-09 — The RFI view
 
 **No schema change** (`user_version` stays **14**); no `install.sh`/`OS_IMAGE` change ⇒ no
