@@ -188,7 +188,15 @@ def test_build_status_bar_integration(monkeypatch: pytest.MonkeyPatch, tmp_path)
         weather_cache=sb.WeatherCache(),
         now=_FIXED_NOW,
     )
-    assert set(payload) == {"server_time_utc", "lst_hours", "station", "source", "weather", "disk"}
+    assert set(payload) == {
+        "server_time_utc",
+        "lst_hours",
+        "station",
+        "source",
+        "weather",
+        "scanner",
+        "disk",
+    }
     assert payload["station"]["name"] == "Discovery Dish"
     assert 0.0 <= payload["lst_hours"] < 24.0
     assert payload["source"]["source"] == "synthetic"

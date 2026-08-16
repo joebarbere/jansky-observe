@@ -25,6 +25,7 @@ dependencies = [
     "pillow>=10.0",
     "weasyprint>=62",
     "pyserial>=3.5",
+    "zeroconf>=0.132",
 ]
 
 [project.urls]
