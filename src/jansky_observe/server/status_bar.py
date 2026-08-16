@@ -24,6 +24,7 @@ from sqlmodel import Session, select
 from jansky_observe.astro.pointing import local_sidereal_time_hours
 from jansky_observe.control import ctl_request
 from jansky_observe.models import Location, Station
+from jansky_observe.server.routers.remote_scan import scanner_status
 from jansky_observe.weather.provider import WeatherUnavailable, get_weather
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -154,6 +155,7 @@ def build_status_bar(
     broadcaster: Broadcaster,
     engine: Engine | None,
     weather_cache: WeatherCache,
+    remote_scanners: dict[str, dict[str, Any]] | None = None,
     now: float | None = None,
 ) -> dict[str, Any]:
     """Assemble the status-bar payload (roadmap M6).
@@ -171,6 +173,11 @@ def build_status_bar(
     weather_cache : WeatherCache
         Caller-owned cache dict (persist one on ``app.state``) so the ~15-min
         TTL survives across requests.
+    remote_scanners : dict, optional
+        The remote-scanner presence registry (``app.state.remote_scanners``,
+        plans/remote-scanner.md); reduced to the ``scanner`` chip — the
+        newest scanner's host/age/connected state, or ``None`` when no
+        scanner has ever checked in.
     now : float, optional
         Wall-clock override (unix seconds) for the clocks/ages; current time by
         default. Used by tests.
@@ -179,14 +186,16 @@ def build_status_bar(
     -------
     dict
         ``server_time_utc``, ``lst_hours``, ``station``, ``source``,
-        ``weather``, and ``disk``.
+        ``weather``, ``scanner``, and ``disk``.
     """
     now = time.time() if now is None else now
     station_chip, lat, lon = _station_chip(engine)
     lst_hours = None if lon is None else local_sidereal_time_hours(lon, _dt(now))
+    scanners = scanner_status(remote_scanners)
     return {
         "server_time_utc": _dt(now).isoformat(),
         "lst_hours": None if lst_hours is None else round(lst_hours, 4),
+        "scanner": scanners[0] if scanners else None,
         "station": station_chip,
         "source": _source_badge(ctl_endpoint, broadcaster, now=now),
         "weather": _weather_chip(weather_cache, lat, lon, now=now),

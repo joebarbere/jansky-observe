@@ -64,7 +64,15 @@ def test_status_bar_route_returns_payload(tmp_path) -> None:
         resp = client.get("/api/status_bar")
     assert resp.status_code == 200
     body = resp.json()
-    assert set(body) == {"server_time_utc", "lst_hours", "station", "source", "weather", "disk"}
+    assert set(body) == {
+        "server_time_utc",
+        "lst_hours",
+        "station",
+        "source",
+        "weather",
+        "scanner",
+        "disk",
+    }
     assert body["station"]["name"] == "Discovery Dish"
     assert 0.0 <= body["lst_hours"] < 24.0
     assert body["source"]["reachable"] is False  # dead ctl endpoint

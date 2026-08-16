@@ -42,6 +42,7 @@ from jansky_observe.control import ctl_request
 from jansky_observe.db import init_db
 from jansky_observe.frames import SpectralFrame, decode_zmq, pack_ws
 from jansky_observe.server.diagnostics import collect_diagnostics
+from jansky_observe.server.discovery import advertise, unregister
 from jansky_observe.server.live_badge import LiveBadge
 from jansky_observe.server.mapping import MapRunState, map_loop
 from jansky_observe.server.routers import (
@@ -61,6 +62,7 @@ from jansky_observe.server.routers import (
 )
 from jansky_observe.server.routers.captures import register_stopped_capture
 from jansky_observe.server.routers.captures import router as captures_router
+from jansky_observe.server.routers.remote_scan import router as remote_scan_router
 from jansky_observe.server.scheduler import SchedulerState, scheduler_loop
 from jansky_observe.server.status_bar import WeatherCache, build_status_bar
 from jansky_observe.server.tracking import TrackingState, tracking_loop
@@ -265,11 +267,15 @@ async def _lifespan(application: FastAPI) -> AsyncIterator[None]:
     application.state.mapping_task = map_task
     # FastMCP's HTTP transport runs a session manager inside the sub-app's own
     # lifespan — it must be entered here or /mcp requests 500.
+    # mDNS advertisement (plans/remote-scanner.md): best-effort; a None handle
+    # means "not advertised" and everything else proceeds unchanged.
+    mdns_handle = await asyncio.to_thread(advertise, settings.port)
     mcp_app = application.state.mcp_app
     try:
         async with mcp_app.router.lifespan_context(mcp_app):
             yield
     finally:
+        await asyncio.to_thread(unregister, mdns_handle)
         for background in (task, sched_task, track_task, map_task):
             background.cancel()
             with contextlib.suppress(asyncio.CancelledError):
@@ -313,6 +319,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
     application.include_router(catalog.router)
     application.include_router(wizard.router)
     application.include_router(captures_router)
+    application.include_router(remote_scan_router)
     application.include_router(calibration.router)
     application.include_router(campaigns.router)
     application.include_router(maps.router)
@@ -395,6 +402,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             broadcaster=application.state.broadcaster,
             engine=application.state.engine,
             weather_cache=application.state.weather_cache,
+            remote_scanners=getattr(application.state, "remote_scanners", None),
         )
 
     @application.get("/api/diagnostics")

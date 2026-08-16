@@ -89,6 +89,25 @@
     }
   }
 
+  function renderScanner(sc) {
+    const el = cb("scanner");
+    if (!el) return;
+    if (!sc) {
+      // no scanner has ever checked in this server lifetime: hide the chip
+      el.hidden = true;
+      return;
+    }
+    el.hidden = false;
+    if (sc.connected) {
+      const age = sc.age_s < 60 ? Math.round(sc.age_s) + "s" : Math.round(sc.age_s / 60) + "m";
+      el.textContent = "scanner " + sc.host + " · " + age;
+      el.className = "cb-item cb-scanner";
+    } else {
+      el.textContent = "scanner " + sc.host + " · lost";
+      el.className = "cb-item cb-scanner cb-warn";
+    }
+  }
+
   function renderDisk(disk) {
     const el = cb("disk");
     if (!el) return;
@@ -115,6 +134,7 @@
     renderStation(d.station);
     renderSource(d.source);
     renderWeather(d.weather);
+    renderScanner(d.scanner);
     renderDisk(d.disk);
   }
 
