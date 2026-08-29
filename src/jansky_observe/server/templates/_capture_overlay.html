@@ -1,0 +1,61 @@
+{# The reference-model overlay panel for one capture (plans/calibrated-overlay.md).
+
+   The M12 spec asked for a toggle beside the spectrum; what shipped was a new-tab link.
+   This is that toggle. Calibrated mode defaults ON whenever a Tsys is available, because
+   a check you have to remember to run is a check that does not run. #}
+{% if not overlay.available %}
+  <p class="muted small">Model overlay unavailable: {{ overlay.reason }}</p>
+{% else %}
+  {% set cal = overlay.calibrated %}
+  <div class="overlay-panel" data-capture-id="{{ capture.id }}">
+    <div class="overlay-toggles small">
+      <label>
+        <input type="checkbox" class="overlay-toggle" data-mode="calibrated"
+               {% if cal.available %}checked{% else %}disabled{% endif %}>
+        calibrated (K)
+      </label>
+      <label>
+        <input type="checkbox" class="overlay-toggle" data-mode="residual"
+               {% if cal.available %}checked{% else %}disabled{% endif %}>
+        residual
+      </label>
+      <span class="muted">l={{ "%.1f"|format(overlay.l_deg) }}° b={{ "%.1f"|format(overlay.b_deg) }}°
+        · {{ overlay.model.source }} model</span>
+    </div>
+
+    <img class="overlay-img" alt="observed spectrum vs the {{ overlay.model.source }} reference model"
+         src="/api/captures/{{ capture.id }}/overlay.png{% if cal.available %}?calibrated=1&amp;residual=1{% endif %}">
+
+    {% if not cal.available %}
+      <p class="muted small">Shape comparison only — {{ cal.reason }}. A pure scale error
+        (an uncorrected main-beam efficiency, say) is invisible on twin axes.</p>
+    {% else %}
+      {% set c = cal.comparison %}
+      <p class="muted small">
+        Tsys {{ "%.0f"|format(cal.tsys_k) }} K · axis {{ cal.axis_label }}
+        {%- if not cal.is_main_beam %} (no main-beam efficiency applied — set
+        <code>JANSKY_OBSERVE_ETA_MB</code>){% endif %}
+      </p>
+      {% if c %}
+        <table class="overlay-stats small">
+          <tr>
+            <th title="least squares observed ≈ a × model; reported, never applied">scale ratio</th>
+            <td><strong>{{ "%.3f"|format(c.scale_ratio) }}</strong></td>
+            <th>residual RMS</th><td>{{ "%.1f"|format(c.residual_rms_k) }} K</td>
+          </tr>
+          <tr>
+            <th title="observed peak velocity minus model peak velocity">Δv peak</th>
+            <td>{{ "%+.1f"|format(c.peak_dv_kms) }} km/s</td>
+            <th>overlap</th>
+            <td>{{ "%.0f"|format(c.overlap_kms[0]) }} … {{ "%.0f"|format(c.overlap_kms[1]) }} km/s
+              ({{ c.n_channels }} ch)</td>
+          </tr>
+        </table>
+      {% else %}
+        <p class="muted small">No comparison: the observed and model velocity axes barely
+          overlap.</p>
+      {% endif %}
+    {% endif %}
+    <p class="muted small">A visual aid, not a detection verdict.</p>
+  </div>
+{% endif %}

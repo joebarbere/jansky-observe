@@ -32,8 +32,8 @@ from pydantic import BaseModel
 from sqlalchemy import Engine
 from sqlmodel import Session, col, select
 
-from jansky_observe.astro.hi_reference import reference_profile
-from jansky_observe.astro.lsr import vlsr_axis
+from jansky_observe.astro.hi_reference import ReferenceProfile, reference_profile
+from jansky_observe.astro.lsr import doppler_window_hz, vlsr_axis
 from jansky_observe.astro.pointing import sidereal_day_number
 from jansky_observe.capture import rfi as rfi_analysis
 from jansky_observe.confirm.classifier import (
@@ -45,8 +45,10 @@ from jansky_observe.confirm.classifier import (
 )
 from jansky_observe.confirm.noise import power_distribution
 from jansky_observe.confirm.onoff import difference_spectrum
+from jansky_observe.confirm.overlay import compare_to_model
 from jansky_observe.confirm.plots import rfi_spectrum_plot, verdict_plot
 from jansky_observe.confirm.radiometer import radiometer_estimate
+from jansky_observe.confirm.tbscale import brightness_temperature
 from jansky_observe.control import ctl_request
 from jansky_observe.export.figures import profile_overlay_figure, total_power_histogram_figure
 from jansky_observe.models import (
@@ -723,12 +725,67 @@ def api_capture_power_histogram(
     return FileResponse(out, media_type="image/png")
 
 
-def _overlay_for_capture(session: Session, capture: Capture, data_dir: str) -> dict[str, Any]:
+def _calibrated_for_capture(
+    session: Session,
+    capture: Capture,
+    *,
+    freq_hz: np.ndarray,
+    power_db: np.ndarray,
+    velocity: np.ndarray,
+    coord: SkyCoord,
+    location: Location,
+    when: datetime,
+    model: ReferenceProfile,
+    eta_mb: float,
+) -> dict[str, Any]:
+    """The kelvin-axis half of the overlay (plans/calibrated-overlay.md).
+
+    Needs an M10 sky/ground Tsys on the capture's calibration epoch. Degrades with a
+    reason rather than raising — the shape-only overlay must keep working when there is
+    no calibration. The scale ratio is reported, never applied.
+    """
+    if capture.cal_epoch_id is None:
+        return {"available": False, "reason": "capture has no calibration epoch"}
+    epoch = session.get(CalibrationEpoch, capture.cal_epoch_id)
+    if epoch is None or epoch.tsys_k is None:
+        return {"available": False, "reason": "no Tsys on the calibration epoch (run sky/ground)"}
+
+    window = doppler_window_hz(
+        coord, location.lat_deg, location.lon_deg, location.elevation_m, when
+    )
+    try:
+        scale = brightness_temperature(
+            freq_hz, power_db, tsys_k=epoch.tsys_k, exclude=window, eta_mb=eta_mb
+        )
+    except ValueError as exc:
+        return {"available": False, "reason": f"cannot scale to kelvin: {exc}"}
+
+    comparison = compare_to_model(velocity, scale.temperature_k, model.v_lsr_kms, model.t_b_k)
+    return {
+        "available": True,
+        "tsys_k": scale.tsys_k,
+        "eta_mb": scale.eta_mb,
+        "is_main_beam": scale.is_main_beam,
+        "axis_label": scale.axis_label,
+        "baseline_rms": scale.baseline_rms,
+        "temperature_k": scale.temperature_k.tolist(),
+        "comparison": comparison.stats() if comparison is not None else None,
+    }
+
+
+def _overlay_for_capture(
+    session: Session, capture: Capture, data_dir: str, *, eta_mb: float = 1.0
+) -> dict[str, Any]:
     """Observed spectrum on a v_LSR axis + the reference HI model overlay (roadmap M12).
 
     ``{"available": False, "reason": ...}`` when there is no pointing (can't know the
     galactic direction) or no model was obtained (offline / off-survey). The model is
-    a visual aid, never a verdict."""
+    a visual aid, never a verdict.
+
+    When the capture carries an M10 sky/ground Tsys the result also carries a
+    ``calibrated`` block putting the observed spectrum on a kelvin axis and comparing it
+    to the model numerically (plans/calibrated-overlay.md); that block degrades with its
+    own reason and never suppresses the shape-only overlay."""
     pointing = _pointing_context(session, capture)
     if pointing is None:
         return {"available": False, "reason": "needs a linked observation (pointing + time)"}
@@ -762,6 +819,18 @@ def _overlay_for_capture(session: Session, capture: Capture, data_dir: str) -> d
             "t_b_k": model.t_b_k.tolist(),
             "peak_t_b_k": model.peak_t_b_k,
         },
+        "calibrated": _calibrated_for_capture(
+            session,
+            capture,
+            freq_hz=freq_hz,
+            power_db=power_db,
+            velocity=velocity,
+            coord=coord,
+            location=location,
+            when=when,
+            model=model,
+            eta_mb=eta_mb,
+        ),
     }
 
 
@@ -775,20 +844,53 @@ def api_capture_overlay(request: Request, session: SessionDep, capture_id: int) 
     model (offline / off-survey). A visual aid, NOT a detection verdict."""
     capture = get_or_404(session, Capture, capture_id)
     _require_npz(capture)
-    return _overlay_for_capture(session, capture, request.app.state.settings.data_dir)
+    settings = request.app.state.settings
+    return _overlay_for_capture(session, capture, settings.data_dir, eta_mb=settings.eta_mb)
 
 
 @router.get("/api/captures/{capture_id}/overlay.png")
-def api_capture_overlay_png(request: Request, session: SessionDep, capture_id: int) -> FileResponse:
+def api_capture_overlay_png(
+    request: Request,
+    session: SessionDep,
+    capture_id: int,
+    calibrated: bool = False,
+    residual: bool = True,
+) -> FileResponse:
     """The observed-vs-reference-model overlay PNG (roadmap M12). 409 when no model
-    is available (offline / off-survey / no pointing)."""
+    is available (offline / off-survey / no pointing).
+
+    ``calibrated=1`` draws both traces on one shared kelvin axis instead of the
+    shape-only twin axes, which is what makes a pure scale error visible
+    (plans/calibrated-overlay.md); it **409s with the reason** when no Tsys is
+    available rather than silently falling back to the shape-only plot. ``residual=0``
+    drops the observed−model panel from the calibrated figure."""
     capture = get_or_404(session, Capture, capture_id)
     _require_npz(capture)
-    overlay = _overlay_for_capture(session, capture, request.app.state.settings.data_dir)
+    settings = request.app.state.settings
+    overlay = _overlay_for_capture(session, capture, settings.data_dir, eta_mb=settings.eta_mb)
     if not overlay["available"]:
         raise HTTPException(status_code=409, detail=overlay["reason"])
     observed, model = overlay["observed"], overlay["model"]
-    out = Path(request.app.state.settings.data_dir) / "plots" / f"capture-{capture_id}-overlay.png"
+
+    kelvin: np.ndarray | None = None
+    axis_label = "T_A (K)"
+    comparison = None
+    if calibrated:
+        cal = overlay["calibrated"]
+        if not cal["available"]:
+            raise HTTPException(status_code=409, detail=cal["reason"])
+        kelvin = np.asarray(cal["temperature_k"])
+        axis_label = cal["axis_label"]
+        if residual:
+            comparison = compare_to_model(
+                np.asarray(observed["v_lsr_kms"]),
+                kelvin,
+                np.asarray(model["v_lsr_kms"]),
+                np.asarray(model["t_b_k"]),
+            )
+
+    suffix = "-calibrated" if calibrated else ""
+    out = Path(settings.data_dir) / "plots" / f"capture-{capture_id}-overlay{suffix}.png"
     profile_overlay_figure(
         np.asarray(observed["v_lsr_kms"]),
         np.asarray(observed["power_db"]),
@@ -797,8 +899,30 @@ def api_capture_overlay_png(request: Request, session: SessionDep, capture_id: i
         out,
         title=f"Capture {capture_id} — observed vs {model['source']} model",
         model_source=model["source"],
+        observed_t_b_k=kelvin,
+        observed_axis_label=axis_label,
+        comparison=comparison,
     )
     return FileResponse(out, media_type="image/png")
+
+
+@router.get("/captures/{capture_id}/overlay_panel", response_class=HTMLResponse)
+def capture_overlay_panel(request: Request, session: SessionDep, capture_id: int) -> HTMLResponse:
+    """The overlay panel fragment: the figure plus its toggles and comparison numbers.
+
+    The M12 spec asked for a toggle beside the spectrum and what shipped was a
+    new-tab link; this is that toggle (plans/calibrated-overlay.md). Calibrated mode
+    defaults **on** whenever a Tsys is available — a check you have to remember to run
+    is a check that does not run."""
+    capture = get_or_404(session, Capture, capture_id)
+    _require_npz(capture)
+    settings = request.app.state.settings
+    overlay = _overlay_for_capture(session, capture, settings.data_dir, eta_mb=settings.eta_mb)
+    return TEMPLATES.TemplateResponse(
+        request,
+        "_capture_overlay.html",
+        {"capture": capture, "overlay": overlay},
+    )
 
 
 @router.get("/api/captures/{capture_id}/spectrum")

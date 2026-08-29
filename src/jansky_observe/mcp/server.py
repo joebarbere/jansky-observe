@@ -213,10 +213,21 @@ def build_mcp(app: FastAPI) -> FastMCP:
         """The observed spectrum + a reference HI-survey (LAB) model for the capture's
         galactic direction (roadmap M12): the observed v_LSR spectrum plus the expected
         profile, for a SHAPE comparison (does the bump sit at the model's velocity, with
-        a similar width?). Observed is relative power, so it's shape-only. Best-effort:
-        {available:false, reason} when there's no pointing or no model (offline / off the
-        surveyed sky). This is a VISUAL AID, not a detection verdict — the quantitative
-        model cross-check lives in jansky-research. Read-only."""
+        a similar width?). Observed is relative power, so that part is shape-only.
+
+        When the capture carries an M10 sky/ground Tsys the result also has a
+        `calibrated` block: the observed spectrum on a KELVIN axis plus a numeric
+        comparison — `scale_ratio` (least squares observed ≈ a·model), `residual_rms_k`,
+        `peak_dv_kms`. A scale_ratio well below 1 with a good shape match is the
+        signature of an uncorrected main-beam efficiency. Check `is_main_beam`: when it
+        is false the axis is ANTENNA temperature, not brightness temperature. The ratio
+        is reported, never applied.
+
+        Best-effort throughout: {available:false, reason} when there's no pointing or no
+        model (offline / off the surveyed sky), and the `calibrated` block degrades with
+        its own reason without suppressing the shape-only overlay. This is a VISUAL AID,
+        not a detection verdict — the quantitative model cross-check lives in
+        jansky-research. Read-only."""
         return await _get(app, f"/api/captures/{capture_id}/overlay")
 
     @mcp.tool

@@ -147,6 +147,21 @@ Virgo's source — **or** a jansky-research plan-78-supplied profile, the cross-
 read-only MCP tools (`get_radiometer_estimate` + `get_hi_model_overlay` → **27 tools**). The
 quantitative model cross-check (`hi4pi_xcheck`) stays deferred to jansky-research plan 78; N_HI /
 FITS / all-sky-map / pulsar are parked. Spec: `plans/m12-model-overlay-and-radiometer.md`.
+**The calibrated overlay (unreleased, `plans/calibrated-overlay.md`)** closes two gaps M12 left —
+**no schema change** (`user_version` stays 14), no new dependency, no QEMU gate. M12's overlay
+shipped as a new-tab link (its own spec asked for a toggle) and compares observed **relative dB**
+against model **kelvin** on twin axes, so it is shape-only and **a pure scale error is invisible in
+it**. Now: `confirm/tbscale.py` puts the observed spectrum on a kelvin axis from M10's sky/ground
+`Tsys` (`T_A = Tsys·(P/B − 1)`, baseline fitted outside the Doppler window); `confirm/overlay.py`
+returns a **scale ratio** (least squares `observed ≈ a·model`), residual RMS and Δv_peak;
+`profile_overlay_figure` gains a shared-kelvin-axis mode + residual panel; and
+`GET /captures/{id}/overlay_panel` is the toggle, calibrated **on by default** when a Tsys exists.
+Three standing rules: **the scale ratio is reported, never applied** (applying it hides the defect);
+**`eta_mb` defaults to 1.0 and the axis is then labelled `T_A`, not `T_B`** (`JANSKY_OBSERVE_ETA_MB`
+— a small dish runs η_MB ≈ 0.5–0.7, so mislabelling builds a ~1.5× error into everything
+downstream); and `hi4pi_xcheck` is still deferred to jansky-research plan 78 — this ships the
+measurement, not the verdict.
+
 This all sits on top of M8 research-bridge/guides
 (`v0.9.1`), M7 calibration/scheduling, the M6 cockpit, and the `v0.6.x` feature-complete base:
 capture (synthetic + real Airspy), observation records + wizard + observing ladder, the hline_v1

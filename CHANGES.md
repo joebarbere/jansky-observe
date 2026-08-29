@@ -6,6 +6,44 @@ milestones**). Work that landed outside a milestone gets a brief summary under t
 that shipped it. Maintained as part of `/release` — a release isn't finished until its
 section exists here.
 
+## Unreleased — The calibrated overlay
+
+**No schema change** (`user_version` stays **14**). No new dependency, no `install.sh`/`OS_IMAGE`
+change ⇒ **no QEMU gate**. Spec: `plans/calibrated-overlay.md`.
+
+M12 shipped the LAB reference overlay as a `target="_blank"` link, though its own spec asked for a
+toggle beside the spectrum. More importantly, that overlay compares observed **relative dB** against
+model **kelvin** on two independent axes — a *shape* comparison, in which a pure scale error is
+invisible: the curves line up and the station looks calibrated. This release closes both gaps.
+
+- **A kelvin axis** — `confirm/tbscale.py` turns a relative-dB spectrum into antenna temperature
+  using M10's sky/ground `Tsys` and a baseline fitted outside the HI Doppler window
+  (`T_A = Tsys · (P/B − 1)`). `eta_mb` arrives as `JANSKY_OBSERVE_ETA_MB` (default **1.0**), and at
+  1.0 the axis is labelled **`T_A (K)`, not `T_B`** — a small dish with a simple feed runs at
+  η_MB ≈ 0.5–0.7, so calling an uncorrected `T_A` a brightness temperature builds a ~1.5× error
+  into everything derived from it.
+- **A comparison, not an impression** — `confirm/overlay.py` interpolates the model onto the
+  observed grid and returns a **scale ratio** (least squares `observed ≈ a · model`), residual RMS,
+  and Δv_peak. **The ratio is reported, never applied**; rescaling the trace would hide the defect
+  the panel exists to surface. No comparison is reported below 8 overlapping channels.
+- **The figure** — `profile_overlay_figure` gains a calibrated mode drawing both traces on **one
+  shared kelvin axis** plus an optional observed−model residual panel. Default behaviour and the
+  existing signature are unchanged.
+- **The toggle** — `GET /captures/{id}/overlay_panel` (htmx fragment) replaces the new-tab link with
+  a `<details>` panel carrying the figure, the comparison numbers, and calibrated/residual
+  checkboxes (`static/overlay.js`). Calibrated defaults **on** whenever a Tsys exists: a check you
+  have to remember to run is a check that does not run.
+- `GET /api/captures/{id}/overlay` gains a `calibrated` block (additive — the PDF report and the
+  `get_hi_model_overlay` MCP tool are unmoved), and `overlay.png` takes `?calibrated=1&residual=1`.
+  `calibrated=1` without a Tsys **409s with the reason** rather than silently drawing shape-only.
+
+Prompted by Pierre Terrier's 2025 amateur rotation-curve study, which overlays LAB on all sixteen
+of its spectra and still could not see that its temperatures run at ~0.65 of the survey's. That
+0.65 is now a regression test (`tests/test_model_comparison.py`).
+
+The quantitative cross-check (`hi4pi_xcheck`, a calibrated agreement *verdict*) remains deferred to
+jansky-research plan 78 — this ships the measurement, not the verdict.
+
 ## v0.15.0 — 2026-08-15 — The remote RFI scanner
 
 **No schema change** (`user_version` stays **14**). `install.sh` gained one apt dependency
