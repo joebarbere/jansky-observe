@@ -305,3 +305,31 @@ def test_overlay_panel_notes_shape_only_without_tsys(
     html = client.get(f"/captures/{cap_id}/overlay_panel").text
     assert "Shape comparison only" in html
     assert 'data-mode="calibrated"' in html and "disabled" in html
+
+
+def test_residual_variants_render_to_distinct_files(
+    client: TestClient, engine: Engine, tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Every parameter that changes the figure must be in its filename.
+
+    Two variants sharing one path race under concurrent requests and would let any
+    later mtime cache serve the wrong one."""
+    monkeypatch.setattr(captures_router, "reference_profile", lambda *a, **k: _MODEL)
+    cap_id = _capture_with_observation(engine, _write_npz(tmp_path / "c.npz"))
+    _stamp_epoch(engine, cap_id, _cal_epoch(engine, tsys_k=150.0))
+
+    assert (
+        client.get(f"/api/captures/{cap_id}/overlay.png?calibrated=1&residual=1").status_code == 200
+    )
+    assert (
+        client.get(f"/api/captures/{cap_id}/overlay.png?calibrated=1&residual=0").status_code == 200
+    )
+    assert client.get(f"/api/captures/{cap_id}/overlay.png").status_code == 200
+
+    plots = tmp_path / "data" / "plots"
+    names = sorted(p.name for p in plots.glob(f"capture-{cap_id}-overlay*.png"))
+    assert names == [
+        f"capture-{cap_id}-overlay-calibrated-noresidual.png",
+        f"capture-{cap_id}-overlay-calibrated.png",
+        f"capture-{cap_id}-overlay.png",
+    ]

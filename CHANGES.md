@@ -37,9 +37,22 @@ invisible: the curves line up and the station looks calibrated. This release clo
   `get_hi_model_overlay` MCP tool are unmoved), and `overlay.png` takes `?calibrated=1&residual=1`.
   `calibrated=1` without a Tsys **409s with the reason** rather than silently drawing shape-only.
 
+- **A per-pointing profile memo** — `astro/hi_reference.py` gains a bounded in-process LRU on top
+  of its on-disk cache, so an observation whose captures share a pointing resolves the LAB profile
+  once (167 us -> 3.7 us per lookup). `provider` is part of the key so a `web` profile cannot
+  shadow plan 78's authoritative `file` one; failures are never memoized, so a transient outage
+  does not become permanent; cached arrays are read-only so a caller cannot poison later renders.
+- **Fixed:** `overlay.png`'s filename carried `calibrated` but not `residual`, so the two
+  calibrated variants shared one path — a race under concurrent requests.
+
 Prompted by Pierre Terrier's 2025 amateur rotation-curve study, which overlays LAB on all sixteen
 of its spectra and still could not see that its temperatures run at ~0.65 of the survey's. That
 0.65 is now a regression test (`tests/test_model_comparison.py`).
+
+The panel still loads on first open rather than eagerly. Measurement says the LAB profile was never
+what made eager rendering expensive (0.17 ms on a disk-cache hit); the cost is ~63 ms of astropy per
+capture, charged twice because the PNG route recomputes, plus 136 ms of matplotlib. The plan records
+the numbers and the three ways to close it.
 
 The quantitative cross-check (`hi4pi_xcheck`, a calibrated agreement *verdict*) remains deferred to
 jansky-research plan 78 — this ships the measurement, not the verdict.

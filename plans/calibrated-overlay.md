@@ -130,10 +130,37 @@ The "visual aid, not a detection verdict" caption stays in both modes.
   **two** checkboxes, calibrated and residual. There is deliberately no "model off" box: a figure
   with the model hidden is just the spectrum plot, which already exists.
 - `_capture_results.html`: the new-tab link becomes a `<details>` that loads the panel on first
-  open (`hx-trigger="toggle once"` — an observation with a dozen captures must not fire a dozen LAB
-  fetches unasked). Calibrated+residual default on whenever Tsys is available — the M12 spec's
-  toggle, with the default set so the check runs itself.
+  open (`hx-trigger="toggle once"`). Calibrated+residual default on whenever Tsys is available —
+  the M12 spec's toggle, with the default set so the check runs itself.
 - `static/overlay.js` — ~30 lines: rebuild the `<img src>` from the checkbox state. No framework.
+
+## Piece 5 — per-pointing profile memo (`astro/hi_reference.py`)
+
+An in-process memo on top of the existing on-disk cache, keyed by
+`(l_rounded, b_rounded, provider, cache_dir)`, so an observation whose captures share a pointing
+resolves the profile **once** rather than once per capture. Bounded LRU (64 entries) behind a lock,
+since FastAPI's sync routes run in a threadpool.
+
+Three deliberate choices:
+
+- **`provider` is in the key.** `file` is plan 78's authoritative path; a profile the `web` provider
+  happened to memoize first must not be served in its place.
+- **Only successes are memoized.** Caching a `None` would turn a transient outage into a permanent
+  one for the process's lifetime.
+- **Cached arrays are marked read-only.** A caller mutating one in place would otherwise poison
+  every later render of that pointing.
+
+`clear_profile_memo()` / `profile_memo_size()` are exported for tests and for forcing a re-read
+after a profile file is replaced under a running server.
+
+Measured: 167 us -> 3.7 us per lookup. See the honest note below for why that does *not* unlock
+always-on.
+
+### Also fixed here
+
+`overlay.png`'s filename carried `calibrated` but **not** `residual`, so the two calibrated variants
+were written to the same path — a race under concurrent requests, and a wrong-variant hit for any
+future mtime cache. Every parameter that changes the figure is now in its name.
 
 ## Testing
 
@@ -142,8 +169,11 @@ The "visual aid, not a detection verdict" caption stays in both modes.
 - `tests/test_model_comparison.py` — **the regression that matters: a spectrum scaled by 0.65
   returns `scale_ratio ≈ 0.65`.** That is the Terrier defect encoded as a test. Plus a shifted
   spectrum returns the right `peak_dv_kms`, and a too-short overlap returns `None`.
-- `tests/test_overlay.py` — extended for the new figure modes, the query params, the 409, and the
-  panel fragment.
+- `tests/test_overlay.py` — extended for the new figure modes, the query params, the 409, the
+  panel fragment, and that the three figure variants land in three distinct files.
+- `tests/test_hi_reference.py` — the memo serves a repeat pointing without touching disk, rounds
+  to the LAB grid, refuses to let `web` shadow `file`, does not cache failures, hands back
+  read-only arrays, and evicts.
 
 ## Done when
 
@@ -152,12 +182,41 @@ The "visual aid, not a detection verdict" caption stays in both modes.
 - A capture with a sky/ground Tsys shows observed and model on one kelvin axis, a residual panel,
   and a scale ratio.
 
-**An honest note on how far this gets.** The argument above is that always-on beats opt-in, and
-what ships is still one click: the `<details>` starts collapsed and fetches on first open. That is
-a deliberate trade — an observation with a dozen captures would otherwise fire a dozen LAB fetches
-on page load — but it is a trade, not the ideal. Terrier's overlay is genuinely always visible and
-ours is not. Closing the remaining gap means caching profiles per pointing rather than per capture,
-so a whole observation costs one fetch; that is worth doing and is not done here.
+**An honest note on how far this gets, with the numbers.** The argument above is that always-on
+beats opt-in, and what ships is still one click: the `<details>` starts collapsed and loads on first
+open. I first justified that by saying an eager panel would fire a dozen LAB fetches per page. **That
+was wrong, and measuring it says so.** The on-disk cache in `hi_reference` already dedupes by rounded
+(l, b), so a repeat lookup was a 0.17 ms stat + `np.load`, never a network round trip.
+
+Measured per capture, 1024-channel spectrum, on this machine:
+
+| step | cost |
+|---|---|
+| `reference_profile`, disk-cache hit | 0.17 ms |
+| `reference_profile`, in-process memo hit | **0.004 ms** |
+| `vlsr_axis` (astropy) | 30 ms |
+| `doppler_window_hz` (astropy) | 32 ms |
+| `brightness_temperature` | 0.12 ms |
+| `compare_to_model` | 0.03 ms |
+| `profile_overlay_figure` PNG | **136 ms** |
+
+The per-pointing memo is therefore **correct and nearly free, and is not what gates always-on**: it
+turns 2.0 ms into 0.04 ms across twelve captures, against ~760 ms of astropy for the same twelve.
+Eager rendering costs roughly `N × (63 ms astropy + 63 ms again in the PNG route + 136 ms
+matplotlib)` — about 3 s for a twelve-capture observation, and the LAB profile is 0.1% of it.
+
+Closing the gap for real means one of:
+
+1. **Serve the PNG from disk when it is newer than the capture.** Kills 199 ms per repeat view.
+   Now unblocked (the figure's parameters are in its filename as of this branch), but it needs a
+   staleness rule covering `eta_mb` and the model profile, not just the capture's mtime.
+2. **Let the PNG route reuse the panel's computation** instead of recomputing `_overlay_for_capture`
+   — halves the astropy, needs a short-TTL cross-request cache.
+3. **Not** caching the astropy across captures. `vlsr_axis`/`doppler_window_hz` depend on time, and
+   quantising that to share entries would corrupt `peak_dv_kms`, which exists to detect drift at
+   exactly the km/s level such a shortcut would introduce.
+
+None of those is done here. Terrier'''s overlay is genuinely always visible and ours is not.
 - `make lint typecheck cov` green at the 85% floor; `/verify` passes.
 - `CHANGES.md` + `CLAUDE.md` updated; no schema change; no installer change.
 

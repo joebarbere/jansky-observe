@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import numpy as np
 import pytest
 
@@ -79,3 +81,112 @@ def test_file_provider_reads_only_the_cache(tmp_path, monkeypatch: pytest.Monkey
 def test_no_cache_dir_no_network_is_none() -> None:
     # file provider with no cache dir → nothing to read → None (no crash).
     assert reference_profile(30.0, 0.0, provider="file") is None
+
+
+# ---- per-pointing memo (plans/calibrated-overlay.md) ------------------------------
+
+
+def test_memo_serves_a_repeat_pointing_without_touching_disk(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An observation whose captures share a pointing does the (l, b) work once."""
+    hi_reference.clear_profile_memo()
+    monkeypatch.setattr(hi_reference, "_lab_profile_text", lambda *a, **k: _SAMPLE_TEXT)
+    first = reference_profile(30.0, 0.0, provider="web", cache_dir=str(tmp_path))
+    assert first is not None
+
+    loads: list[Path] = []
+    real_load = hi_reference._load_cached
+    monkeypatch.setattr(
+        hi_reference,
+        "_load_cached",
+        lambda path, l_deg, b_deg: (loads.append(path), real_load(path, l_deg, b_deg))[1],
+    )
+    second = reference_profile(30.0, 0.0, provider="web", cache_dir=str(tmp_path))
+
+    assert second is first  # same object, not merely equal
+    assert loads == []  # the disk was never consulted
+
+
+def test_memo_rounds_to_the_lab_grid() -> None:
+    """Pointings inside one 0.5° LAB cell share a memo entry."""
+    hi_reference.clear_profile_memo()
+    profile = ReferenceProfile(
+        v_lsr_kms=np.array([0.0]), t_b_k=np.array([1.0]), source="LAB", l_deg=30.0, b_deg=0.0
+    )
+    hi_reference._remember((30.0, 0.0, "web", ""), profile)
+    assert reference_profile(30.1, 0.04, provider="web") is profile
+
+
+def test_memo_does_not_let_web_shadow_the_file_provider(tmp_path) -> None:
+    """provider is part of the key on purpose.
+
+    ``file`` is plan 78's authoritative path; a profile the web provider happened to
+    memoize first must not be served in its place."""
+    hi_reference.clear_profile_memo()
+    web_profile = ReferenceProfile(
+        v_lsr_kms=np.array([0.0]), t_b_k=np.array([1.0]), source="LAB", l_deg=30.0, b_deg=0.0
+    )
+    hi_reference._remember((30.0, 0.0, "web", str(tmp_path)), web_profile)
+    assert reference_profile(30.0, 0.0, provider="file", cache_dir=str(tmp_path)) is None
+
+
+def test_memo_does_not_cache_failures(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A transient outage must not become permanent for the process's lifetime."""
+    hi_reference.clear_profile_memo()
+    monkeypatch.setattr(
+        hi_reference,
+        "_lab_profile_text",
+        lambda *a, **k: (_ for _ in ()).throw(RuntimeError("offline")),
+    )
+    assert reference_profile(30.0, 0.0, provider="web", cache_dir=str(tmp_path)) is None
+    assert hi_reference.profile_memo_size() == 0
+
+    monkeypatch.setattr(hi_reference, "_lab_profile_text", lambda *a, **k: _SAMPLE_TEXT)
+    assert reference_profile(30.0, 0.0, provider="web", cache_dir=str(tmp_path)) is not None
+
+
+def test_memoized_arrays_are_read_only(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A caller mutating an array in place would poison every later render."""
+    hi_reference.clear_profile_memo()
+    monkeypatch.setattr(hi_reference, "_lab_profile_text", lambda *a, **k: _SAMPLE_TEXT)
+    profile = reference_profile(30.0, 0.0, provider="web", cache_dir=str(tmp_path))
+    assert profile is not None
+    with pytest.raises(ValueError):
+        profile.t_b_k[0] = 999.0
+
+
+def test_memo_is_bounded(monkeypatch: pytest.MonkeyPatch) -> None:
+    hi_reference.clear_profile_memo()
+    monkeypatch.setattr(hi_reference, "_MEMO_MAX", 4)
+    for i in range(10):
+        hi_reference._remember(
+            (float(i), 0.0, "web", ""),
+            ReferenceProfile(
+                v_lsr_kms=np.array([0.0]),
+                t_b_k=np.array([1.0]),
+                source="LAB",
+                l_deg=float(i),
+                b_deg=0.0,
+            ),
+        )
+    assert hi_reference.profile_memo_size() == 4
+    # An evicted pointing must fall through to a real lookup, so block the network.
+    monkeypatch.setattr(
+        hi_reference,
+        "_lab_profile_text",
+        lambda *a, **k: (_ for _ in ()).throw(AssertionError("must not fetch")),
+    )
+    # Least-recently-used entries were evicted, newest kept.
+    assert reference_profile(9.0, 0.0, provider="web") is not None
+    assert reference_profile(0.0, 0.0, provider="web") is None
+
+
+def test_different_cache_dirs_do_not_share_a_memo_entry(tmp_path) -> None:
+    """The cache dir is part of the key — a test tmpdir must not leak into another."""
+    hi_reference.clear_profile_memo()
+    profile = ReferenceProfile(
+        v_lsr_kms=np.array([0.0]), t_b_k=np.array([1.0]), source="LAB", l_deg=30.0, b_deg=0.0
+    )
+    hi_reference._remember((30.0, 0.0, "file", str(tmp_path / "a")), profile)
+    assert reference_profile(30.0, 0.0, provider="file", cache_dir=str(tmp_path / "b")) is None

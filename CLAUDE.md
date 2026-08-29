@@ -156,6 +156,12 @@ it**. Now: `confirm/tbscale.py` puts the observed spectrum on a kelvin axis from
 returns a **scale ratio** (least squares `observed ≈ a·model`), residual RMS and Δv_peak;
 `profile_overlay_figure` gains a shared-kelvin-axis mode + residual panel; and
 `GET /captures/{id}/overlay_panel` is the toggle, calibrated **on by default** when a Tsys exists.
+`astro/hi_reference.py` also gained a bounded per-pointing memo over its disk cache (167 us ->
+3.7 us per lookup; `provider` is in the key so `web` cannot shadow plan 78's `file`, failures are
+never cached, arrays are read-only). Note the measurement it produced: the LAB profile was never
+what made rendering many captures expensive — that is ~63 ms of astropy per capture (charged
+twice, the PNG route recomputes) plus 136 ms of matplotlib, which is why the panel still loads on
+first open rather than eagerly.
 Three standing rules: **the scale ratio is reported, never applied** (applying it hides the defect);
 **`eta_mb` defaults to 1.0 and the axis is then labelled `T_A`, not `T_B`** (`JANSKY_OBSERVE_ETA_MB`
 — a small dish runs η_MB ≈ 0.5–0.7, so mislabelling builds a ~1.5× error into everything

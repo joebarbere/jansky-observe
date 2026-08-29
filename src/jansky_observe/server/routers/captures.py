@@ -889,7 +889,12 @@ def api_capture_overlay_png(
                 np.asarray(model["t_b_k"]),
             )
 
+    # Every parameter that changes the figure belongs in the filename: two variants
+    # sharing one path race each other under concurrent requests, and would let any
+    # later mtime-based cache serve the wrong one.
     suffix = "-calibrated" if calibrated else ""
+    if calibrated and not residual:
+        suffix += "-noresidual"
     out = Path(settings.data_dir) / "plots" / f"capture-{capture_id}-overlay{suffix}.png"
     profile_overlay_figure(
         np.asarray(observed["v_lsr_kms"]),
