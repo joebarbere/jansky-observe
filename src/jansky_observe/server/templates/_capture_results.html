@@ -23,10 +23,17 @@
         hx-target="#cap-confirm-{{ capture.id }}" hx-swap="innerHTML"
         title="classify the ON−OFF difference against paired OFF #{{ pair_off_id }}">Classify difference (ON−OFF)</button>
 {% endif %}
+{# Loads on first open, not on page load: the overlay may fetch a LAB profile, and an
+   observation with a dozen captures should not fire a dozen network calls unasked. #}
+<details class="overlay-details"
+         hx-get="/captures/{{ capture.id }}/overlay_panel" hx-trigger="toggle once"
+         hx-target="find .overlay-slot" hx-swap="innerHTML">
+  <summary class="muted small"
+           title="observed spectrum vs the LAB reference model for this direction">model overlay</summary>
+  <div class="overlay-slot"><span class="muted small">loading overlay&hellip;</span></div>
+</details>
 <div class="muted small cap-analysis">
   analysis:
-  <a href="/api/captures/{{ capture.id }}/overlay.png" target="_blank"
-     title="observed spectrum vs the LAB reference model for this direction (shape only)">model overlay</a> ·
   <a href="/api/captures/{{ capture.id }}/power_histogram.png" target="_blank"
      title="total-power distribution + Gaussian fit — a non-Gaussian tail flags RFI/saturation">noise histogram</a> ·
   <a href="/api/captures/{{ capture.id }}/radiometer" target="_blank"

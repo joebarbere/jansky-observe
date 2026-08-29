@@ -19,6 +19,8 @@ quantitative cross-check stays in jansky-research plan 78, plan §6).
 from __future__ import annotations
 
 import logging
+import threading
+from collections import OrderedDict
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -26,7 +28,13 @@ import astropy.units as u
 import numpy as np
 from astropy.coordinates import SkyCoord
 
-__all__ = ["LAB_PROFILE_URL", "ReferenceProfile", "reference_profile"]
+__all__ = [
+    "LAB_PROFILE_URL",
+    "ReferenceProfile",
+    "clear_profile_memo",
+    "profile_memo_size",
+    "reference_profile",
+]
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +42,29 @@ logger = logging.getLogger(__name__)
 LAB_PROFILE_URL = "https://www.astro.uni-bonn.de/hisurvey/euhou/LABprofile/download.php"
 _HTTP_TIMEOUT_S = 12.0
 _GRID_DEG = 0.5  # LAB is ~0.5° sampled; round the query + cache key to it.
+
+#: In-process per-pointing memo, on top of the on-disk cache. The disk cache already
+#: makes a repeat lookup cheap (~0.16 ms measured), so this is not what makes rendering
+#: many captures affordable — the per-capture astropy in ``lsr`` dominates that by two
+#: orders of magnitude. What the memo buys is that an observation whose captures share a
+#: pointing does the (l, b) work **once** instead of once per capture: no repeated stat +
+#: ``np.load`` per render, and, on a cold cache, no chance of several concurrent requests
+#: each firing the same LAB fetch before the first one has written the file.
+_MEMO_MAX = 64
+_memo: OrderedDict[tuple[float, float, str, str], ReferenceProfile] = OrderedDict()
+_memo_lock = threading.Lock()
+
+
+def clear_profile_memo() -> None:
+    """Drop the in-process per-pointing memo (tests; a forced re-read from disk)."""
+    with _memo_lock:
+        _memo.clear()
+
+
+def profile_memo_size() -> int:
+    """How many pointings the in-process memo currently holds."""
+    with _memo_lock:
+        return len(_memo)
 
 
 @dataclass(frozen=True)
@@ -149,14 +180,28 @@ def reference_profile(
         The profile, or ``None`` when unavailable (offline, no file, parse
         failure, empty result) — never raises. The overlay treats ``None`` as
         "model unavailable".
+
+    Notes
+    -----
+    Successful lookups are memoized in-process per (rounded l, b, provider,
+    cache_dir), so an observation whose captures share a pointing resolves the
+    profile once. Failures are never memoized. If a profile file is replaced under
+    a running server, call :func:`clear_profile_memo` to force a re-read.
     """
     lr, br = _round_grid(l_deg), _round_grid(b_deg)
     cache = Path(cache_dir) if cache_dir is not None else None
+    key = (lr, br, provider, "" if cache is None else str(cache))
+
+    with _memo_lock:
+        memoized = _memo.get(key)
+        if memoized is not None:
+            _memo.move_to_end(key)
+            return memoized
 
     if cache is not None:
         cached = _load_cached(_cache_path(cache, lr, br), lr, br)
         if cached is not None:
-            return cached
+            return _remember(key, cached)
 
     if provider != "web":
         return None  # "file" provider: only the cache/dropped file, checked above
@@ -172,4 +217,22 @@ def reference_profile(
     if cache is not None:
         cache.mkdir(parents=True, exist_ok=True)
         np.savez(_cache_path(cache, lr, br), v_lsr_kms=v, t_b_k=t)
-    return ReferenceProfile(v_lsr_kms=v, t_b_k=t, source="LAB", l_deg=lr, b_deg=br)
+    return _remember(key, ReferenceProfile(v_lsr_kms=v, t_b_k=t, source="LAB", l_deg=lr, b_deg=br))
+
+
+def _remember(key: tuple[float, float, str, str], profile: ReferenceProfile) -> ReferenceProfile:
+    """Memoize a successful lookup and return it.
+
+    Only successes are memoized: a ``None`` means offline or off-survey, and caching
+    that would turn a transient network failure into a permanent one for the process's
+    lifetime. The arrays are marked read-only first — a caller that mutated one in place
+    would otherwise poison every later render of that pointing.
+    """
+    profile.v_lsr_kms.setflags(write=False)
+    profile.t_b_k.setflags(write=False)
+    with _memo_lock:
+        _memo[key] = profile
+        _memo.move_to_end(key)
+        while len(_memo) > _MEMO_MAX:
+            _memo.popitem(last=False)
+    return profile

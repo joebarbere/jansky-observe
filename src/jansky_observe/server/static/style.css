@@ -446,3 +446,13 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--accent); }
 .rf-chain li { padding: 0.15rem 0; }
 .template-checklist { margin-left: 1.5rem; }
 .sdr code { color: var(--accent); }
+
+/* Reference-model overlay panel (plans/calibrated-overlay.md) */
+.overlay-details > summary { cursor: pointer; }
+.overlay-panel { margin-top: 0.4rem; }
+.overlay-toggles { display: flex; gap: 0.9rem; align-items: center; flex-wrap: wrap; }
+.overlay-toggles label { display: inline-flex; gap: 0.3rem; align-items: center; }
+.overlay-img { max-width: 100%; height: auto; display: block; margin: 0.4rem 0; }
+.overlay-stats { border-collapse: collapse; }
+.overlay-stats th { text-align: left; font-weight: 600; padding-right: 0.4rem; }
+.overlay-stats td { padding-right: 1.2rem; }

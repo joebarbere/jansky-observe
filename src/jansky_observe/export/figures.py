@@ -23,6 +23,7 @@ from jansky_observe.astro.lsr import vlsr_axis  # noqa: E402
 from jansky_observe.confirm.classifier import averaged_spectrum  # noqa: E402
 from jansky_observe.confirm.mapping import GriddedMap  # noqa: E402
 from jansky_observe.confirm.noise import PowerDistribution  # noqa: E402
+from jansky_observe.confirm.overlay import ModelComparison  # noqa: E402
 from jansky_observe.confirm.plots import dual_axis_plot  # noqa: E402
 
 __all__ = [
@@ -118,20 +119,34 @@ def profile_overlay_figure(
     *,
     title: str | None = None,
     model_source: str = "LAB",
+    observed_t_b_k: np.ndarray | None = None,
+    observed_axis_label: str = "T_A (K)",
+    comparison: ModelComparison | None = None,
 ) -> Path:
     """Overlay a reference HI model on the observed spectrum (roadmap M12).
 
-    The observed averaged spectrum (relative dB) is drawn against v_LSR on the left
-    axis; the reference model brightness temperature (K) shares the v_LSR axis on an
-    independent right axis — a **shape** comparison (same velocity? similar width?),
-    since the observed spectrum is relative until absolute calibration. Carries a
-    "visual aid, not a detection verdict" caption; verdicts come only from the
-    deterministic classifiers (plan §12.5).
+    Two modes, selected by ``observed_t_b_k``:
+
+    **Shape mode (default).** The observed averaged spectrum (relative dB) is drawn
+    against v_LSR on the left axis; the reference model brightness temperature (K)
+    shares the v_LSR axis on an independent right axis — a **shape** comparison (same
+    velocity? similar width?), since the observed spectrum is relative until absolute
+    calibration.
+
+    **Calibrated mode** (``observed_t_b_k`` given, plans/calibrated-overlay.md). Both
+    traces are drawn on **one shared kelvin axis**, which is the only way a pure scale
+    error is visible — an uncorrected main-beam efficiency leaves the shapes matching
+    perfectly while the amplitudes differ by a constant. Pass ``comparison`` to add a
+    residual panel (observed − model) captioned with the scale ratio.
+
+    Carries a "visual aid, not a detection verdict" caption in both modes; verdicts come
+    only from the deterministic classifiers (plan §12.5).
 
     Parameters
     ----------
     v_lsr_kms, observed_power_db : numpy.ndarray
-        The observed spectrum's v_LSR axis (km/s) and power (dB).
+        The observed spectrum's v_LSR axis (km/s) and power (dB). ``observed_power_db``
+        is ignored in calibrated mode.
     model_v_lsr_kms, model_t_b_k : numpy.ndarray
         The reference model's velocity axis (km/s) and brightness temperature (K).
     out_png : str or Path
@@ -140,12 +155,35 @@ def profile_overlay_figure(
         Figure title.
     model_source : str
         Survey name for the legend (e.g. "LAB").
+    observed_t_b_k : numpy.ndarray, optional
+        The observed spectrum in kelvin
+        (:func:`jansky_observe.confirm.tbscale.brightness_temperature`). Selects
+        calibrated mode.
+    observed_axis_label : str
+        The honest y-axis label for the calibrated trace — ``T_A (K)`` when no main-beam
+        efficiency was applied, ``T_B (K)`` when one was
+        (:attr:`~jansky_observe.confirm.tbscale.TemperatureScale.axis_label`).
+    comparison : ModelComparison, optional
+        Adds a residual panel below the main axes. Calibrated mode only.
 
     Returns
     -------
     Path
         The written file's path.
     """
+    if observed_t_b_k is not None:
+        return _calibrated_overlay_figure(
+            v_lsr_kms,
+            np.asarray(observed_t_b_k, dtype=np.float64),
+            model_v_lsr_kms,
+            model_t_b_k,
+            out_png,
+            title=title,
+            model_source=model_source,
+            observed_axis_label=observed_axis_label,
+            comparison=comparison,
+        )
+
     fig, ax = plt.subplots(figsize=(9, 5))
     ax.plot(v_lsr_kms, observed_power_db, color="tab:blue", lw=0.9, label="observed (this station)")
     ax.set_xlabel("v_LSR (km/s)")
@@ -176,6 +214,77 @@ def profile_overlay_figure(
         fontsize=7.5,
         color="#555555",
     )
+    fig.tight_layout(rect=(0, 0.03, 1, 1))
+
+    out = Path(out_png)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(out, dpi=_DPI)
+    plt.close(fig)
+    return out
+
+
+def _calibrated_overlay_figure(
+    v_lsr_kms: np.ndarray,
+    observed_t_b_k: np.ndarray,
+    model_v_lsr_kms: np.ndarray,
+    model_t_b_k: np.ndarray,
+    out_png: str | Path,
+    *,
+    title: str | None,
+    model_source: str,
+    observed_axis_label: str,
+    comparison: ModelComparison | None,
+) -> Path:
+    """Calibrated overlay: both traces on one kelvin axis, optional residual panel.
+
+    Split out of :func:`profile_overlay_figure` for readability; see that function's
+    docstring for the semantics. The scale ratio is *annotated*, never applied — a
+    rescaled trace would hide the defect the panel exists to show.
+    """
+    if comparison is not None:
+        fig, (ax, res_ax) = plt.subplots(2, 1, figsize=(9, 6.5), sharex=True, height_ratios=[3, 1])
+    else:
+        fig, ax = plt.subplots(figsize=(9, 5))
+        res_ax = None
+
+    ax.plot(v_lsr_kms, observed_t_b_k, color="tab:blue", lw=0.9, label="observed (this station)")
+    ax.plot(
+        model_v_lsr_kms,
+        model_t_b_k,
+        color="tab:red",
+        lw=1.4,
+        ls="--",
+        label=f"{model_source} model",
+    )
+    ax.set_ylabel(observed_axis_label)
+    ax.axhline(0.0, color="#999999", lw=0.6, zorder=0)
+    ax.legend(loc="upper right", fontsize=8)
+    ax.set_title(title or f"Observed spectrum vs {model_source} model (calibrated)")
+
+    if comparison is not None and res_ax is not None:
+        res_ax.plot(comparison.v_lsr_kms, comparison.residual_k, color="tab:purple", lw=0.9)
+        res_ax.axhline(0.0, color="#999999", lw=0.8)
+        res_ax.set_ylabel("obs − model (K)")
+        res_ax.set_xlabel("v_LSR (km/s)")
+        ax.annotate(
+            f"scale ratio {comparison.scale_ratio:.3f}  ·  "
+            f"residual RMS {comparison.residual_rms_k:.1f} K  ·  "
+            f"Δv_peak {comparison.peak_dv_kms:+.1f} km/s",
+            xy=(0.02, 0.94),
+            xycoords="axes fraction",
+            fontsize=8,
+            color="#333333",
+        )
+    else:
+        ax.set_xlabel("v_LSR (km/s)")
+
+    caption = (
+        f"{model_source} reference model on a shared kelvin axis. "
+        "The scale ratio is reported, NOT applied — a visual aid, not a detection verdict."
+    )
+    if observed_axis_label.startswith("T_A"):
+        caption += " Observed is ANTENNA temperature (no main-beam efficiency applied)."
+    fig.text(0.5, 0.01, caption, ha="center", fontsize=7.5, color="#555555")
     fig.tight_layout(rect=(0, 0.03, 1, 1))
 
     out = Path(out_png)
